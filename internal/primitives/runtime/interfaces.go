@@ -21,7 +21,9 @@ type Hash interface {
 	// Bytes returns a byte slice representation of Hash
 	Bytes() []byte
 	// String returns a unique string representation of the hash
-	String() string
+	// String() string
+	// Length return the byte length of the hash
+	Length() int
 }
 
 // Hasher is an interface around hashing
@@ -31,6 +33,9 @@ type Hasher[H Hash] interface {
 
 	// Produce the hash of some codec-encodable value.
 	HashEncoded(s any) H
+
+	// Construct new hash from source data
+	NewHash(data []byte) H
 }
 
 // Blake2-256 Hash implementation.
@@ -46,6 +51,10 @@ func (bt256 BlakeTwo256) Hash(s []byte) hash.H256 {
 func (bt256 BlakeTwo256) HashEncoded(s any) hash.H256 {
 	bytes := scale.MustMarshal(s)
 	return bt256.Hash(bytes)
+}
+
+func (bt256 BlakeTwo256) NewHash(data []byte) hash.H256 {
+	return hash.H256(data)
 }
 
 var _ Hasher[hash.H256] = BlakeTwo256{}
