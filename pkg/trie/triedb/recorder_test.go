@@ -14,8 +14,7 @@ import (
 // Tests results are based on
 // https://github.com/dimartiro/substrate-trie-test/blob/master/src/substrate_trie_test.rs
 func TestRecorder(t *testing.T) {
-	inmemoryDB := NewMemoryDB[hash.H256, runtime.BlakeTwo256](EmptyNode)
-
+	inmemoryDB := NewMemoryDB()
 	triedb := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](inmemoryDB)
 
 	triedb.Put([]byte("pol"), []byte("polvalue"))

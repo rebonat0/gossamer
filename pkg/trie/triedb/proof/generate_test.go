@@ -140,7 +140,7 @@ func Test_NewProof(t *testing.T) {
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			// Build trie
-			inmemoryDB := NewMemoryDB(triedb.EmptyNode)
+			inmemoryDB := NewMemoryDB()
 			triedb := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](inmemoryDB)
 
 			for _, entry := range testCase.entries {

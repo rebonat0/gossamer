@@ -24,7 +24,7 @@ func Benchmark_ValueCache(b *testing.B) {
 	}
 	version := trie.V1
 
-	db := NewMemoryDB[hash.H256, runtime.BlakeTwo256](EmptyNode)
+	db := NewMemoryDB()
 	trie := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
 	trie.SetVersion(version)
 
@@ -73,7 +73,7 @@ func Benchmark_NodesCache(b *testing.B) {
 	}
 	version := trie.V1
 
-	db := NewMemoryDB[hash.H256, runtime.BlakeTwo256](EmptyNode)
+	db := NewMemoryDB()
 	trie := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
 	trie.SetVersion(version)
 

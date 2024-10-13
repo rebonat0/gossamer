@@ -25,7 +25,7 @@ func Test_rawIterator(t *testing.T) {
 		"bigbigvalue":  make([]byte, 66),
 	}
 
-	db := NewMemoryDB[hash.H256, runtime.BlakeTwo256](EmptyNode)
+	db := NewMemoryDB()
 	trieDB := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
 	trieDB.SetVersion(trie.V1)
 

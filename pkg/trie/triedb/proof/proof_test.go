@@ -11,6 +11,7 @@ import (
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/pkg/trie"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,7 +143,7 @@ func Test_GenerateAndVerify(t *testing.T) {
 		for _, trieVersion := range trieVersions {
 			t.Run(fmt.Sprintf("%s_%s", name, trieVersion.String()), func(t *testing.T) {
 				// Build trie
-				inmemoryDB := NewMemoryDB(triedb.EmptyNode)
+				inmemoryDB := NewMemoryDB()
 				triedb := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](inmemoryDB)
 				triedb.SetVersion(trieVersion)
 

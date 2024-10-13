@@ -6,12 +6,19 @@ package triedb
 import (
 	"testing"
 
+	"github.com/ChainSafe/gossamer/internal/database"
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/pkg/trie"
 	"github.com/ChainSafe/gossamer/pkg/trie/inmemory"
 	"github.com/stretchr/testify/assert"
 )
+
+func newTestDB(t assert.TestingT) database.Table {
+	db, err := database.NewPebble("", true)
+	assert.NoError(t, err)
+	return database.NewTable(db, "trie")
+}
 
 func TestIterator(t *testing.T) {
 	db := newTestDB(t)
@@ -37,7 +44,7 @@ func TestIterator(t *testing.T) {
 	root, err := inMemoryTrie.Hash()
 	assert.NoError(t, err)
 
-	inmemoryDB := NewMemoryDB[hash.H256, runtime.BlakeTwo256](EmptyNode)
+	inmemoryDB := NewMemoryDB()
 	trieDB := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](inmemoryDB)
 
 	for k, v := range entries {

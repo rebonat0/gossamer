@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
+	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
 	"github.com/ChainSafe/gossamer/pkg/scale"
-	"github.com/ChainSafe/gossamer/pkg/trie/db"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/codec"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/hash"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/nibbles"
@@ -140,22 +140,27 @@ func newValueFromCachedNodeValue[H hash.Hash](val CachedNodeValue[H]) nodeValue 
 	}
 }
 
-func inMemoryFetchedValue[H hash.Hash](value nodeValue, prefix []byte, db db.DBGetter) ([]byte, error) {
+func inMemoryFetchedValue[H hash.Hash](
+	value nodeValue,
+	prefix nibbles.Prefix,
+	db hashdb.HashDB[H, []byte],
+	recorder TrieRecorder,
+	fullKey []byte,
+) ([]byte, error) {
 	switch v := value.(type) {
 	case inline:
 		return v, nil
 	case newValueRef[H]:
 		return v.data, nil
 	case valueRef[H]:
-		prefixedKey := bytes.Join([][]byte{prefix, v.hash.Bytes()}, nil)
-		value, err := db.Get(prefixedKey)
-		if err != nil {
-			return nil, err
+		value := db.Get(v.hash, hashdb.Prefix(prefix))
+		if value == nil {
+			return nil, ErrIncompleteDB
 		}
-		if value != nil {
-			return value, nil
+		if recorder != nil {
+			recorder.Record(ValueAccess[H]{Hash: v.hash, Value: *value, FullKey: fullKey})
 		}
-		return value, ErrIncompleteDB
+		return *value, nil
 	default:
 		panic("unreachable")
 	}

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"slices"
 
+	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
 	"github.com/ChainSafe/gossamer/pkg/trie"
-	"github.com/ChainSafe/gossamer/pkg/trie/db"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/codec"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/hash"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/nibbles"
@@ -21,7 +21,7 @@ type Query[Item any] func(data []byte) Item
 // Trie lookup helper object.
 type TrieLookup[H hash.Hash, Hasher hash.Hasher[H], QueryItem any] struct {
 	// db to query from
-	db db.DBGetter
+	db hashdb.HashDB[H, []byte]
 	// hash to start at
 	hash H
 	// optional cache to speed up the db lookups
@@ -36,7 +36,7 @@ type TrieLookup[H hash.Hash, Hasher hash.Hasher[H], QueryItem any] struct {
 
 // NewTrieLookup is constructor for [TrieLookup]
 func NewTrieLookup[H hash.Hash, Hasher hash.Hasher[H], QueryItem any](
-	db db.DBGetter,
+	db hashdb.HashDB[H, []byte],
 	hash H,
 	cache TrieCache[H],
 	recorder TrieRecorder,
@@ -192,7 +192,7 @@ type loadCachedNodeValueFunc[H hash.Hash, R any] func(
 	prefix nibbles.Prefix,
 	fullKey []byte,
 	cache TrieCache[H],
-	db db.DBGetter,
+	db hashdb.HashDB[H, []byte],
 	recorder TrieRecorder,
 ) (R, error)
 
@@ -212,16 +212,15 @@ func lookupWithCacheInternal[H hash.Hash, Hasher hash.Hasher[H], R, QueryItem an
 	var depth uint
 	for {
 		node, err := cache.GetOrInsertNode(hash, func() (CachedNode[H], error) {
-			prefixedKey := append(nibbleKey.Mid(keyNibbles).Left().JoinedBytes(), hash.Bytes()...)
-			nodeData, err := l.db.Get(prefixedKey)
-			if err != nil {
+			nodeData := l.db.Get(hash, hashdb.Prefix(nibbleKey.Mid(keyNibbles).Left()))
+			if nodeData == nil {
 				if depth == 0 {
 					return nil, ErrInvalidStateRoot
 				} else {
 					return nil, ErrIncompleteDB
 				}
 			}
-			reader := bytes.NewReader(nodeData)
+			reader := bytes.NewReader(*nodeData)
 			decoded, err := codec.Decode[H](reader)
 			if err != nil {
 				return nil, err
@@ -307,7 +306,7 @@ type loadValueFunc[H hash.Hash, QueryItem, R any] func(
 	v codec.EncodedValue,
 	prefix nibbles.Prefix,
 	fullKey []byte,
-	db db.DBGetter,
+	db hashdb.HashDB[H, []byte],
 	recorder TrieRecorder,
 	query Query[QueryItem],
 ) (R, error)
@@ -329,15 +328,15 @@ func lookupWithoutCache[H hash.Hash, Hasher hash.Hasher[H], QueryItem, R any](
 
 	var depth uint
 	for {
-		prefixedKey := append(nibbleKey.Mid(keyNibbles).Left().JoinedBytes(), hash.Bytes()...)
-		nodeData, err := l.db.Get(prefixedKey)
-		if err != nil {
+		nodeDataOpt := l.db.Get(hash, hashdb.Prefix(nibbleKey.Mid(keyNibbles).Left()))
+		if nodeDataOpt == nil {
 			if depth == 0 {
 				return nil, ErrInvalidStateRoot
 			} else {
 				return nil, ErrIncompleteDB
 			}
 		}
+		nodeData := *nodeDataOpt
 
 		l.recordAccess(EncodedNodeAccess[H]{Hash: hash, EncodedNode: nodeData})
 
@@ -408,6 +407,7 @@ func lookupWithoutCache[H hash.Hash, Hasher hash.Hasher[H], QueryItem, R any](
 				}
 			case codec.Empty:
 				l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+				return nil, nil
 			default:
 				panic("unreachable")
 			}
@@ -454,7 +454,7 @@ func loadCachedNodeValue[H hash.Hash](
 	prefix nibbles.Prefix,
 	fullKey []byte,
 	cache TrieCache[H],
-	db db.DBGetter,
+	db hashdb.HashDB[H, []byte],
 	recorder TrieRecorder,
 ) (valueHash[H], error) {
 	switch v := v.(type) {
@@ -465,12 +465,11 @@ func loadCachedNodeValue[H hash.Hash](
 		return valueHash[H](v), nil
 	case NodeCachedNodeValue[H]:
 		node, err := cache.GetOrInsertNode(v.Hash, func() (CachedNode[H], error) {
-			prefixedKey := append(prefix.JoinedBytes(), v.Hash.Bytes()...)
-			val, err := db.Get(prefixedKey)
-			if err != nil {
-				return nil, err
+			val := db.Get(v.Hash, hashdb.Prefix(prefix))
+			if val == nil {
+				return nil, ErrIncompleteDB
 			}
-			return ValueCachedNode[H]{Value: val, Hash: v.Hash}, nil
+			return ValueCachedNode[H]{Value: *val, Hash: v.Hash}, nil
 		})
 		if err != nil {
 			return valueHash[H]{}, err
@@ -511,7 +510,7 @@ func loadValue[H hash.Hash, QueryItem any](
 	v codec.EncodedValue,
 	prefix nibbles.Prefix,
 	fullKey []byte,
-	db db.DBGetter,
+	db hashdb.HashDB[H, []byte],
 	recorder TrieRecorder,
 	query Query[QueryItem],
 ) (qi QueryItem, err error) {
@@ -522,23 +521,19 @@ func loadValue[H hash.Hash, QueryItem any](
 		}
 		return query(v), nil
 	case codec.HashedValue[H]:
-		prefixedKey := append(prefix.JoinedBytes(), v.Hash.Bytes()...)
-		val, err := db.Get(prefixedKey)
-		if err != nil {
-			return qi, err
-		}
+		val := db.Get(v.Hash, hashdb.Prefix(prefix))
 		if val == nil {
-			return qi, fmt.Errorf("%w: %s", ErrIncompleteDB, prefixedKey)
+			return qi, fmt.Errorf("%w: %s", ErrIncompleteDB, fullKey)
 		}
 
 		if recorder != nil {
 			recorder.Record(ValueAccess[H]{
 				Hash:    v.Hash,
-				Value:   val,
+				Value:   *val,
 				FullKey: fullKey,
 			})
 		}
-		return query(val), nil
+		return query(*val), nil
 	default:
 		panic("unreachable")
 	}
@@ -559,7 +554,7 @@ func (l *TrieLookup[H, Hasher, QueryItem]) LookupHash(fullKey []byte) (*H, error
 			v codec.EncodedValue,
 			_ nibbles.Prefix,
 			fullKey []byte,
-			_ db.DBGetter,
+			_ hashdb.HashDB[H, []byte],
 			recorder TrieRecorder,
 			_ Query[QueryItem],
 		) (H, error) {
@@ -619,7 +614,7 @@ func (l *TrieLookup[H, Hasher, QueryItem]) lookupHashWithCache(
 		_ nibbles.Prefix,
 		fullKey []byte,
 		_ TrieCache[H],
-		_ db.DBGetter,
+		_ hashdb.HashDB[H, []byte],
 		recorder TrieRecorder,
 	) (valueHash[H], error) {
 		switch value := value.(type) {

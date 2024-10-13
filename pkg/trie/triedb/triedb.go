@@ -9,9 +9,8 @@ import (
 	"fmt"
 
 	"github.com/ChainSafe/gossamer/pkg/trie"
-	"github.com/ChainSafe/gossamer/pkg/trie/db"
 
-	"github.com/ChainSafe/gossamer/internal/database"
+	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
 	"github.com/ChainSafe/gossamer/internal/log"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/codec"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/hash"
@@ -44,7 +43,7 @@ func WithRecorder[H hash.Hash, Hasher hash.Hasher[H]](r TrieRecorder) TrieDBOpts
 // using lazy loading to fetch nodes
 type TrieDB[H hash.Hash, Hasher hash.Hasher[H]] struct {
 	rootHash H
-	db       db.RWDatabase
+	db       hashdb.HashDB[H, []byte]
 	version  trie.TrieLayout
 	// rootHandle is an in-memory-trie-like representation of the node
 	// references and new inserted nodes in the trie
@@ -54,7 +53,7 @@ type TrieDB[H hash.Hash, Hasher hash.Hasher[H]] struct {
 	storage nodeStorage[H]
 	// deathRow is a set of nodes that we want to delete from db
 	// uses string since it's comparable []byte
-	deathRow map[string]interface{}
+	deathRow map[string]hashPrefix[H]
 	// Optional cache to speed up the db lookups
 	cache TrieCache[H]
 	// Optional recorder for recording trie accesses
@@ -62,15 +61,20 @@ type TrieDB[H hash.Hash, Hasher hash.Hasher[H]] struct {
 }
 
 func NewEmptyTrieDB[H hash.Hash, Hasher hash.Hasher[H]](
-	db db.RWDatabase, opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
+	db hashdb.HashDB[H, []byte], opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
 	hasher := *new(Hasher)
 	root := hasher.Hash([]byte{0})
 	return NewTrieDB[H, Hasher](root, db, opts...)
 }
 
+type hashPrefix[H hash.Hash] struct {
+	Hash H
+	nibbles.Prefix
+}
+
 // NewTrieDB creates a new TrieDB using the given root and db
 func NewTrieDB[H hash.Hash, Hasher hash.Hasher[H]](
-	rootHash H, db db.RWDatabase, opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
+	rootHash H, db hashdb.HashDB[H, []byte], opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
 	rootHandle := persisted[H]{rootHash}
 
 	trieDB := &TrieDB[H, Hasher]{
@@ -79,7 +83,7 @@ func NewTrieDB[H hash.Hash, Hasher hash.Hasher[H]](
 		db:         db,
 		storage:    newNodeStorage[H](),
 		rootHandle: rootHandle,
-		deathRow:   make(map[string]interface{}),
+		deathRow:   make(map[string]hashPrefix[H]),
 	}
 
 	for _, opt := range opts {
@@ -133,7 +137,8 @@ func (t *TrieDB[H, Hasher]) Get(key []byte) []byte {
 }
 
 func (t *TrieDB[H, Hasher]) lookup(fullKey []byte, handle NodeHandle) ([]byte, error) {
-	prefix := fullKey
+	// prefix only use for value node access, so this is always correct.
+	prefix := nibbles.Prefix{Key: fullKey}
 	partialKey := nibbles.NewNibbles(fullKey)
 	for {
 		var partialIdx uint
@@ -162,14 +167,14 @@ func (t *TrieDB[H, Hasher]) lookup(fullKey []byte, handle NodeHandle) ([]byte, e
 				return nil, nil
 			case Leaf[H]:
 				if nibbles.NewNibblesFromNodeKey(n.partialKey).Equal(partialKey) {
-					return inMemoryFetchedValue[H](n.value, prefix, t.db)
+					return inMemoryFetchedValue[H](n.value, prefix, t.db, t.recorder, fullKey)
 				} else {
 					return nil, nil
 				}
 			case Branch[H]:
 				slice := nibbles.NewNibblesFromNodeKey(n.partialKey)
 				if slice.Equal(partialKey) {
-					return inMemoryFetchedValue[H](n.value, prefix, t.db)
+					return inMemoryFetchedValue[H](n.value, prefix, t.db, t.recorder, fullKey)
 				} else if partialKey.StartsWith(slice) {
 					idx := partialKey.At(slice.Len())
 					child := n.children[idx]
@@ -195,18 +200,14 @@ func (t *TrieDB[H, Hasher]) getNodeOrLookup(
 	var nodeData []byte
 	switch nodeHandle := nodeHandle.(type) {
 	case codec.HashedNode[H]:
-		prefixedKey := append(partialKey.JoinedBytes(), nodeHandle.Hash.Bytes()...)
-		var err error
-		nodeData, err = t.db.Get(prefixedKey)
-		if err != nil {
-			return nil, nil, err
-		}
-		if len(nodeData) == 0 {
+		nodeDataOpt := t.db.Get(nodeHandle.Hash, hashdb.Prefix(partialKey))
+		if nodeDataOpt == nil {
 			if partialKey.Key == nil && partialKey.Padded == nil {
 				return nil, nil, fmt.Errorf("%w: %v", ErrInvalidStateRoot, nodeHandle.Hash)
 			}
 			return nil, nil, fmt.Errorf("%w: %v", ErrIncompleteDB, nodeHandle.Hash)
 		}
+		nodeData = *nodeDataOpt
 		nodeHash = &nodeHandle.Hash
 	case codec.InlineNode:
 		nodeHash = nil
@@ -226,16 +227,12 @@ func (t *TrieDB[H, Hasher]) getNodeOrLookup(
 }
 
 func (t *TrieDB[H, Hasher]) fetchValue(hash H, prefix nibbles.Prefix) ([]byte, error) {
-	prefixedKey := append(prefix.JoinedBytes(), hash.Bytes()...)
-	value, err := t.db.Get(prefixedKey)
-	if err != nil {
-		return nil, err
-	}
+	value := t.db.Get(hash, hashdb.Prefix(prefix))
 	if value == nil {
 		return nil, fmt.Errorf("%w: %v", ErrIncompleteDB, hash)
 	}
-	t.recordAccess(ValueAccess[H]{Hash: t.rootHash, Value: value, FullKey: prefix.Key})
-	return value, nil
+	t.recordAccess(ValueAccess[H]{Hash: t.rootHash, Value: *value, FullKey: prefix.Key})
+	return *value, nil
 }
 
 // Remove removes the given key from the trie
@@ -393,11 +390,11 @@ func (t *TrieDB[H, Hasher]) inspect(
 			return &inspectResult{CachedStoredNode[H]{a.node, n.hash}, false}, nil
 		case replaceNode:
 			prefixedKey := append(currentKey.Left().JoinedBytes(), n.hash.Bytes()...)
-			t.deathRow[string(prefixedKey)] = nil
+			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: n.hash, Prefix: currentKey.Left()}
 			return &inspectResult{NewStoredNode(a), true}, nil
 		case deleteNode:
 			prefixedKey := append(currentKey.Left().JoinedBytes(), n.hash.Bytes()...)
-			t.deathRow[string(prefixedKey)] = nil
+			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: n.hash, Prefix: currentKey.Left()}
 			return nil, nil
 		default:
 			panic("unreachable")
@@ -489,7 +486,7 @@ func (t *TrieDB[H, Hasher]) fix(branch Branch[H], key nibbles.Nibbles) (Node, er
 			childNode = n.node
 		case CachedStoredNode[H]:
 			prefixedKey := append(childPrefix.JoinedBytes(), n.hash.Bytes()...)
-			t.deathRow[string(prefixedKey)] = nil
+			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: n.hash, Prefix: childPrefix}
 			childNode = n.node
 		}
 
@@ -807,13 +804,13 @@ func (t *TrieDB[H, Hasher]) replaceOldValue(
 		hash := oldv.getHash()
 		if hash != (*new(H)) {
 			prefixedKey := append(prefix.JoinedBytes(), hash.Bytes()...)
-			t.deathRow[string(prefixedKey)] = nil
+			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: hash, Prefix: prefix}
 		}
 	case newValueRef[H]:
 		hash := oldv.getHash()
 		if hash != (*new(H)) {
 			prefixedKey := append(prefix.JoinedBytes(), hash.Bytes()...)
-			t.deathRow[string(prefixedKey)] = nil
+			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: hash, Prefix: prefix}
 		}
 	}
 	*oldValue = storedValue
@@ -822,15 +819,14 @@ func (t *TrieDB[H, Hasher]) replaceOldValue(
 // lookup node in DB and add it in storage, return storage handle
 func (t *TrieDB[H, Hasher]) lookupNode(hash H, key nibbles.Prefix) (storageHandle, error) {
 	var newNode = func() (Node, error) {
-		prefixedKey := append(key.JoinedBytes(), hash.Bytes()...)
-		encodedNode, err := t.db.Get(prefixedKey)
-		if err != nil {
+		encodedNode := t.db.Get(hash, hashdb.Prefix(key))
+		if encodedNode == nil {
 			return nil, ErrIncompleteDB
 		}
 
-		t.recordAccess(EncodedNodeAccess[H]{Hash: t.rootHash, EncodedNode: encodedNode})
+		t.recordAccess(EncodedNodeAccess[H]{Hash: t.rootHash, EncodedNode: *encodedNode})
 
-		return newNodeFromEncoded[H](hash, encodedNode, &t.storage)
+		return newNodeFromEncoded[H](hash, *encodedNode, &t.storage)
 	}
 	// We only check the `cache` for a node with `get_node` and don't insert
 	// the node if it wasn't there, because in substrate we only access the node while computing
@@ -868,22 +864,12 @@ func (t *TrieDB[H, Hasher]) commit() error {
 	logger.Debug("Committing trie changes to db")
 	logger.Debugf("%d nodes to remove from db", len(t.deathRow))
 
-	dbBatch := t.db.NewBatch()
-	defer func() {
-		if err := dbBatch.Close(); err != nil {
-			logger.Criticalf("cannot close triedb commit batcher: %w", err)
-		}
-	}()
-
-	for hash := range t.deathRow {
-		err := dbBatch.Del([]byte(hash))
-		if err != nil {
-			return err
-		}
+	for _, hp := range t.deathRow {
+		t.db.Remove(hp.Hash, hashdb.Prefix(hp.Prefix))
 	}
 
 	// Reset deathRow
-	t.deathRow = make(map[string]interface{})
+	t.deathRow = make(map[string]hashPrefix[H])
 
 	var handle storageHandle
 	switch h := t.rootHandle.(type) {
@@ -911,17 +897,12 @@ func (t *TrieDB[H, Hasher]) commit() error {
 				mov := k.AppendOptionalSliceAndNibble(partialKey, childIndex)
 				switch n := node.(type) {
 				case newNodeToEncode:
-					hash := (*new(Hasher)).Hash(n.value)
-					prefixedKey := append(k.Prefix().JoinedBytes(), hash.Bytes()...)
-					err := dbBatch.Put(prefixedKey, n.value)
-					if err != nil {
-						return nil, err
-					}
+					hash := t.db.Insert(hashdb.Prefix(k.Prefix()), n.value)
 					t.cacheValue(k.Inner(), n.value, hash)
 					k.DropLasts(mov)
 					return HashChildReference[H]{hash}, nil
 				case trieNodeToEncode:
-					result, err := t.commitChild(dbBatch, n.child, &k)
+					result, err := t.commitChild(n.child, &k)
 					if err != nil {
 						return nil, err
 					}
@@ -938,18 +919,13 @@ func (t *TrieDB[H, Hasher]) commit() error {
 			return err
 		}
 
-		hash := (*new(Hasher)).Hash(encodedNode)
-		err = dbBatch.Put(hash.Bytes(), encodedNode)
-		if err != nil {
-			return err
-		}
+		hash := t.db.Insert(hashdb.EmptyPrefix, encodedNode)
 
 		t.rootHash = hash
 		t.cacheNode(hash, encodedNode, fullKey)
 		t.rootHandle = persisted[H]{t.rootHash}
 
-		// Flush all db changes
-		return dbBatch.Flush()
+		return nil
 	case CachedStoredNode[H]:
 		t.rootHash = stored.hash
 		t.rootHandle = inMemory(
@@ -963,7 +939,6 @@ func (t *TrieDB[H, Hasher]) commit() error {
 
 // Commit a node by hashing it and writing it to the db.
 func (t *TrieDB[H, Hasher]) commitChild(
-	dbBatch database.Batch,
 	child NodeHandle,
 	prefixKey *nibbles.NibbleSlice,
 ) (ChildReference, error) {
@@ -991,18 +966,12 @@ func (t *TrieDB[H, Hasher]) commitChild(
 				mov := prefixKey.AppendOptionalSliceAndNibble(partialKey, childIndex)
 				switch n := node.(type) {
 				case newNodeToEncode:
-					hash := (*new(Hasher)).Hash(n.value)
-					prefixedKey := append(prefixKey.Prefix().JoinedBytes(), hash.Bytes()...)
-					err := dbBatch.Put(prefixedKey, n.value)
-					if err != nil {
-						panic("inserting in db")
-					}
-
+					hash := t.db.Insert(hashdb.Prefix(prefix.Prefix()), n.value)
 					t.cacheValue(prefixKey.Inner(), n.value, hash)
 					prefixKey.DropLasts(mov)
 					return HashChildReference[H]{hash}, nil
 				case trieNodeToEncode:
-					result, err := t.commitChild(dbBatch, n.child, prefixKey)
+					result, err := t.commitChild(n.child, prefixKey)
 					if err != nil {
 						return nil, err
 					}
@@ -1021,12 +990,7 @@ func (t *TrieDB[H, Hasher]) commitChild(
 
 			// Not inlined node
 			if len(encoded) >= (*new(H)).Length() {
-				hash := (*new(Hasher)).Hash(encoded)
-				prefixedKey := append(prefixKey.Prefix().JoinedBytes(), hash.Bytes()...)
-				err := dbBatch.Put(prefixedKey, encoded)
-				if err != nil {
-					return nil, err
-				}
+				hash := t.db.Insert(hashdb.Prefix(prefixKey.Prefix()), encoded)
 
 				t.cacheNode(hash, encoded, fullKey)
 

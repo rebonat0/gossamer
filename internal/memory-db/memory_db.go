@@ -1,6 +1,8 @@
 package memorydb
 
 import (
+	"maps"
+
 	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
 	"golang.org/x/exp/constraints"
 )
@@ -39,6 +41,14 @@ func newMemoryDBFromNullNode[H Hash, Hasher hashdb.Hasher[H], Key constraints.Or
 		data:           make(map[Key]dataRC[T]),
 		hashedNullNode: (*new(Hasher)).Hash(nullKey),
 		nullNodeData:   nullNodeData,
+	}
+}
+
+func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Clone() MemoryDB[H, Hasher, Key, KF, T] {
+	return MemoryDB[H, Hasher, Key, KF, T]{
+		data:           maps.Clone(mdb.data),
+		hashedNullNode: mdb.hashedNullNode,
+		nullNodeData:   mdb.nullNodeData,
 	}
 }
 
@@ -187,6 +197,16 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Remove(key H, prefix hashdb.Prefix) 
 	} else {
 		mdb.data[kfKey] = dataRC[T]{RC: -1}
 	}
+}
+
+func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Keys() map[Key]int32 {
+	keyCounts := make(map[Key]int32)
+	for key, drc := range mdb.data {
+		if drc.RC != 0 {
+			keyCounts[key] = drc.RC
+		}
+	}
+	return keyCounts
 }
 
 type KeyFunction[Hash constraints.Ordered, Key any] interface {
