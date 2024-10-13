@@ -6,7 +6,7 @@ package triedb
 import (
 	"testing"
 
-	"github.com/ChainSafe/gossamer/internal/memory-db"
+	memorydb "github.com/ChainSafe/gossamer/internal/memory-db"
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/pkg/trie"
@@ -18,7 +18,7 @@ import (
 func TestTrieDB_Lookup(t *testing.T) {
 	t.Run("root_not_exists_in_db", func(t *testing.T) {
 		db := memorydb.NewMemoryDB[
-			hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256], []byte,
+			hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256],
 		]([]byte("not0"))
 		empty := runtime.BlakeTwo256{}.Hash([]byte{0})
 		lookup := NewTrieLookup[hash.H256, runtime.BlakeTwo256, []byte](&db, empty, nil, nil, nil)

@@ -10,9 +10,9 @@ import (
 )
 
 func NewMemoryDB() *memorydb.MemoryDB[
-	hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256], []byte] {
+	hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256]] {
 	db := memorydb.NewMemoryDB[
-		hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256], []byte,
+		hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256],
 	]([]byte{0})
 	return &db
 }

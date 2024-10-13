@@ -143,7 +143,7 @@ func newValueFromCachedNodeValue[H hash.Hash](val CachedNodeValue[H]) nodeValue 
 func inMemoryFetchedValue[H hash.Hash](
 	value nodeValue,
 	prefix nibbles.Prefix,
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	recorder TrieRecorder,
 	fullKey []byte,
 ) ([]byte, error) {
@@ -158,9 +158,9 @@ func inMemoryFetchedValue[H hash.Hash](
 			return nil, ErrIncompleteDB
 		}
 		if recorder != nil {
-			recorder.Record(ValueAccess[H]{Hash: v.hash, Value: *value, FullKey: fullKey})
+			recorder.Record(ValueAccess[H]{Hash: v.hash, Value: value, FullKey: fullKey})
 		}
-		return *value, nil
+		return value, nil
 	default:
 		panic("unreachable")
 	}

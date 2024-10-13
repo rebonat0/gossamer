@@ -49,10 +49,10 @@ type Hasher[Out constraints.Ordered] interface {
 
 // / Trait modelling datastore keyed by a hash defined by the `Hasher`.
 // pub trait HashDB<H: Hasher, T>: Send + Sync + AsHashDB<H, T> {
-type HashDB[Hash comparable, T any] interface {
+type HashDB[Hash comparable] interface {
 	/// Look up a given hash into the bytes that hash to it, returning None if the
 	/// hash is not known.
-	Get(key Hash, prefix Prefix) *T
+	Get(key Hash, prefix Prefix) []byte
 
 	/// Check for the existence of a hash-key.
 	Contains(key Hash, prefix Prefix) bool
@@ -64,7 +64,7 @@ type HashDB[Hash comparable, T any] interface {
 
 	/// Like `insert()`, except you provide the key and the data is all moved.
 	// 	fn emplace(&mut self, key: H::Out, prefix: Prefix, value: T);
-	Emplace(key Hash, prefix Prefix, value T)
+	Emplace(key Hash, prefix Prefix, value []byte)
 
 	/// Remove a datum previously inserted. Insertions can be "owed" such that the same number of
 	/// `insert()`s may happen without the data being eventually being inserted into the DB.
@@ -75,11 +75,11 @@ type HashDB[Hash comparable, T any] interface {
 
 // / Trait for immutable reference of HashDB.
 // pub trait HashDBRef<H: Hasher, T> {
-type HashDBRef[Hash comparable, T any] interface {
+type HashDBRef[Hash comparable] interface {
 	/// Look up a given hash into the bytes that hash to it, returning None if the
 	/// hash is not known.
 	// 	fn get(&self, key: &H::Out, prefix: Prefix) -> Option<T>;
-	Get(key Hash, prefix Prefix) *T
+	Get(key Hash, prefix Prefix) []byte
 
 	/// Check for the existance of a hash-key.
 	// fn contains(&self, key: &H::Out, prefix: Prefix) -> bool;

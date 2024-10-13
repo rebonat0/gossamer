@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/ChainSafe/gossamer/internal/hash-db"
+	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
 	"github.com/ChainSafe/gossamer/pkg/trie"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/hash"
@@ -18,7 +18,7 @@ import (
 type MerkleProof[H hash.Hash, Hasher hash.Hasher[H]] [][]byte
 
 func NewMerkleProof[H hash.Hash, Hasher hash.Hasher[H]](
-	db hashdb.HashDB[H, []byte], trieVersion trie.TrieLayout, rootHash H, keys []string) (
+	db hashdb.HashDB[H], trieVersion trie.TrieLayout, rootHash H, keys []string) (
 	proof MerkleProof[H, Hasher], err error) {
 	// Sort and deduplicate keys
 	keys = sortAndDeduplicateKeys(keys)

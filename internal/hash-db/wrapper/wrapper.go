@@ -11,10 +11,10 @@ import (
 type hashConstructor[H runtime.Hash] func(b []byte) H
 
 type Wrapper[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
-	hashdb.HashDB[H, []byte]
+	hashdb.HashDB[H]
 }
 
-func New[H runtime.Hash, Hasher runtime.Hasher[H]](db hashdb.HashDB[H, []byte]) *Wrapper[H, Hasher] {
+func New[H runtime.Hash, Hasher runtime.Hasher[H]](db hashdb.HashDB[H]) *Wrapper[H, Hasher] {
 	return &Wrapper[H, Hasher]{
 		HashDB: db,
 	}
@@ -26,7 +26,7 @@ func (mdbw *Wrapper[H, Hasher]) Get(key []byte) (value []byte, err error) {
 	if val == nil {
 		return nil, fmt.Errorf("missing value")
 	}
-	value = []byte(*val)
+	value = val
 	return value, nil
 }
 func (mdbw *Wrapper[H, Hasher]) Put(key, value []byte) error {

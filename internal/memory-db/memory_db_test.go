@@ -27,7 +27,7 @@ func TestMemoryDB_RemoveAndPurge(t *testing.T) {
 	helloBytes := []byte("Hello world!")
 	helloKey := Keccak256{}.Hash(helloBytes)
 
-	m := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256], []byte]([]byte{0})
+	m := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256]]([]byte{0})
 	m.Remove(helloKey, hashdb.EmptyPrefix)
 	assert.Equal(t, int32(-1), m.raw(helloKey, hashdb.EmptyPrefix).RC)
 	m.Purge()
@@ -37,20 +37,20 @@ func TestMemoryDB_RemoveAndPurge(t *testing.T) {
 	m.Purge()
 	assert.Nil(t, m.raw(helloKey, hashdb.EmptyPrefix))
 
-	m = NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256], []byte]([]byte{0})
+	m = NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256]]([]byte{0})
 	assert.Nil(t, m.removeAndPurge(helloKey, hashdb.EmptyPrefix))
 	assert.Equal(t, int32(-1), m.raw(helloKey, hashdb.EmptyPrefix).RC)
 	m.Insert(hashdb.EmptyPrefix, helloBytes)
 	m.Insert(hashdb.EmptyPrefix, helloBytes)
 	assert.Equal(t, int32(1), m.raw(helloKey, hashdb.EmptyPrefix).RC)
-	assert.Equal(t, &helloBytes, m.removeAndPurge(helloKey, hashdb.EmptyPrefix))
+	assert.Equal(t, helloBytes, m.removeAndPurge(helloKey, hashdb.EmptyPrefix))
 	assert.Nil(t, m.raw(helloKey, hashdb.EmptyPrefix))
 	assert.Nil(t, m.removeAndPurge(helloKey, hashdb.EmptyPrefix))
 }
 
 func TestMemoryDB_Consolidate(t *testing.T) {
-	main := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256], []byte]([]byte{0})
-	other := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256], []byte]([]byte{0})
+	main := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256]]([]byte{0})
+	other := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256]]([]byte{0})
 	removeKey := other.Insert(hashdb.EmptyPrefix, []byte("doggo"))
 	main.Remove(removeKey, hashdb.EmptyPrefix)
 
@@ -64,17 +64,17 @@ func TestMemoryDB_Consolidate(t *testing.T) {
 
 	main.Consolidate(&other)
 
-	assert.Equal(t, &dataRC[[]byte]{[]byte("doggo"), 0}, main.raw(removeKey, hashdb.EmptyPrefix))
-	assert.Equal(t, &dataRC[[]byte]{[]byte("arf"), 2}, main.raw(insertKey, hashdb.EmptyPrefix))
-	assert.Equal(t, &dataRC[[]byte]{[]byte("negative"), -2}, main.raw(negativeRemoveKey, hashdb.EmptyPrefix))
+	assert.Equal(t, &dataRC{[]byte("doggo"), 0}, main.raw(removeKey, hashdb.EmptyPrefix))
+	assert.Equal(t, &dataRC{[]byte("arf"), 2}, main.raw(insertKey, hashdb.EmptyPrefix))
+	assert.Equal(t, &dataRC{[]byte("negative"), -2}, main.raw(negativeRemoveKey, hashdb.EmptyPrefix))
 }
 
 func TestMemoryDB_DefaultWorks(t *testing.T) {
-	db := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256], []byte]([]byte{0})
+	db := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256]]([]byte{0})
 	hashedNullNode := Keccak256{}.Hash([]byte{0})
 	assert.Equal(t, hashedNullNode, db.Insert(hashdb.EmptyPrefix, []byte{0}))
 
-	db2 := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256], []byte]([]byte{0})
+	db2 := NewMemoryDB[hash.H256, Keccak256, hash.H256, HashKey[hash.H256]]([]byte{0})
 	root := db2.hashedNullNode
 	assert.True(t, db2.Contains(root, hashdb.EmptyPrefix))
 	assert.True(t, db.Contains(root, hashdb.EmptyPrefix))

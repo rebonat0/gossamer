@@ -21,7 +21,7 @@ type Query[Item any] func(data []byte) Item
 // Trie lookup helper object.
 type TrieLookup[H hash.Hash, Hasher hash.Hasher[H], QueryItem any] struct {
 	// db to query from
-	db hashdb.HashDB[H, []byte]
+	db hashdb.HashDB[H]
 	// hash to start at
 	hash H
 	// optional cache to speed up the db lookups
@@ -36,7 +36,7 @@ type TrieLookup[H hash.Hash, Hasher hash.Hasher[H], QueryItem any] struct {
 
 // NewTrieLookup is constructor for [TrieLookup]
 func NewTrieLookup[H hash.Hash, Hasher hash.Hasher[H], QueryItem any](
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	hash H,
 	cache TrieCache[H],
 	recorder TrieRecorder,
@@ -192,7 +192,7 @@ type loadCachedNodeValueFunc[H hash.Hash, R any] func(
 	prefix nibbles.Prefix,
 	fullKey []byte,
 	cache TrieCache[H],
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	recorder TrieRecorder,
 ) (R, error)
 
@@ -220,7 +220,7 @@ func lookupWithCacheInternal[H hash.Hash, Hasher hash.Hasher[H], R, QueryItem an
 					return nil, ErrIncompleteDB
 				}
 			}
-			reader := bytes.NewReader(*nodeData)
+			reader := bytes.NewReader(nodeData)
 			decoded, err := codec.Decode[H](reader)
 			if err != nil {
 				return nil, err
@@ -306,7 +306,7 @@ type loadValueFunc[H hash.Hash, QueryItem, R any] func(
 	v codec.EncodedValue,
 	prefix nibbles.Prefix,
 	fullKey []byte,
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	recorder TrieRecorder,
 	query Query[QueryItem],
 ) (R, error)
@@ -328,15 +328,14 @@ func lookupWithoutCache[H hash.Hash, Hasher hash.Hasher[H], QueryItem, R any](
 
 	var depth uint
 	for {
-		nodeDataOpt := l.db.Get(hash, hashdb.Prefix(nibbleKey.Mid(keyNibbles).Left()))
-		if nodeDataOpt == nil {
+		nodeData := l.db.Get(hash, hashdb.Prefix(nibbleKey.Mid(keyNibbles).Left()))
+		if nodeData == nil {
 			if depth == 0 {
 				return nil, ErrInvalidStateRoot
 			} else {
 				return nil, ErrIncompleteDB
 			}
 		}
-		nodeData := *nodeDataOpt
 
 		l.recordAccess(EncodedNodeAccess[H]{Hash: hash, EncodedNode: nodeData})
 
@@ -454,7 +453,7 @@ func loadCachedNodeValue[H hash.Hash](
 	prefix nibbles.Prefix,
 	fullKey []byte,
 	cache TrieCache[H],
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	recorder TrieRecorder,
 ) (valueHash[H], error) {
 	switch v := v.(type) {
@@ -469,7 +468,7 @@ func loadCachedNodeValue[H hash.Hash](
 			if val == nil {
 				return nil, ErrIncompleteDB
 			}
-			return ValueCachedNode[H]{Value: *val, Hash: v.Hash}, nil
+			return ValueCachedNode[H]{Value: val, Hash: v.Hash}, nil
 		})
 		if err != nil {
 			return valueHash[H]{}, err
@@ -510,7 +509,7 @@ func loadValue[H hash.Hash, QueryItem any](
 	v codec.EncodedValue,
 	prefix nibbles.Prefix,
 	fullKey []byte,
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	recorder TrieRecorder,
 	query Query[QueryItem],
 ) (qi QueryItem, err error) {
@@ -529,11 +528,11 @@ func loadValue[H hash.Hash, QueryItem any](
 		if recorder != nil {
 			recorder.Record(ValueAccess[H]{
 				Hash:    v.Hash,
-				Value:   *val,
+				Value:   val,
 				FullKey: fullKey,
 			})
 		}
-		return query(*val), nil
+		return query(val), nil
 	default:
 		panic("unreachable")
 	}
@@ -554,7 +553,7 @@ func (l *TrieLookup[H, Hasher, QueryItem]) LookupHash(fullKey []byte) (*H, error
 			v codec.EncodedValue,
 			_ nibbles.Prefix,
 			fullKey []byte,
-			_ hashdb.HashDB[H, []byte],
+			_ hashdb.HashDB[H],
 			recorder TrieRecorder,
 			_ Query[QueryItem],
 		) (H, error) {
@@ -614,7 +613,7 @@ func (l *TrieLookup[H, Hasher, QueryItem]) lookupHashWithCache(
 		_ nibbles.Prefix,
 		fullKey []byte,
 		_ TrieCache[H],
-		_ hashdb.HashDB[H, []byte],
+		_ hashdb.HashDB[H],
 		recorder TrieRecorder,
 	) (valueHash[H], error) {
 		switch value := value.(type) {

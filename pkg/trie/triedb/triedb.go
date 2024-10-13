@@ -43,7 +43,7 @@ func WithRecorder[H hash.Hash, Hasher hash.Hasher[H]](r TrieRecorder) TrieDBOpts
 // using lazy loading to fetch nodes
 type TrieDB[H hash.Hash, Hasher hash.Hasher[H]] struct {
 	rootHash H
-	db       hashdb.HashDB[H, []byte]
+	db       hashdb.HashDB[H]
 	version  trie.TrieLayout
 	// rootHandle is an in-memory-trie-like representation of the node
 	// references and new inserted nodes in the trie
@@ -61,7 +61,7 @@ type TrieDB[H hash.Hash, Hasher hash.Hasher[H]] struct {
 }
 
 func NewEmptyTrieDB[H hash.Hash, Hasher hash.Hasher[H]](
-	db hashdb.HashDB[H, []byte], opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
+	db hashdb.HashDB[H], opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
 	hasher := *new(Hasher)
 	root := hasher.Hash([]byte{0})
 	return NewTrieDB[H, Hasher](root, db, opts...)
@@ -74,7 +74,7 @@ type hashPrefix[H hash.Hash] struct {
 
 // NewTrieDB creates a new TrieDB using the given root and db
 func NewTrieDB[H hash.Hash, Hasher hash.Hasher[H]](
-	rootHash H, db hashdb.HashDB[H, []byte], opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
+	rootHash H, db hashdb.HashDB[H], opts ...TrieDBOpts[H, Hasher]) *TrieDB[H, Hasher] {
 	rootHandle := persisted[H]{rootHash}
 
 	trieDB := &TrieDB[H, Hasher]{
@@ -200,14 +200,13 @@ func (t *TrieDB[H, Hasher]) getNodeOrLookup(
 	var nodeData []byte
 	switch nodeHandle := nodeHandle.(type) {
 	case codec.HashedNode[H]:
-		nodeDataOpt := t.db.Get(nodeHandle.Hash, hashdb.Prefix(partialKey))
-		if nodeDataOpt == nil {
+		nodeData = t.db.Get(nodeHandle.Hash, hashdb.Prefix(partialKey))
+		if nodeData == nil {
 			if partialKey.Key == nil && partialKey.Padded == nil {
 				return nil, nil, fmt.Errorf("%w: %v", ErrInvalidStateRoot, nodeHandle.Hash)
 			}
 			return nil, nil, fmt.Errorf("%w: %v", ErrIncompleteDB, nodeHandle.Hash)
 		}
-		nodeData = *nodeDataOpt
 		nodeHash = &nodeHandle.Hash
 	case codec.InlineNode:
 		nodeHash = nil
@@ -231,8 +230,8 @@ func (t *TrieDB[H, Hasher]) fetchValue(hash H, prefix nibbles.Prefix) ([]byte, e
 	if value == nil {
 		return nil, fmt.Errorf("%w: %v", ErrIncompleteDB, hash)
 	}
-	t.recordAccess(ValueAccess[H]{Hash: t.rootHash, Value: *value, FullKey: prefix.Key})
-	return *value, nil
+	t.recordAccess(ValueAccess[H]{Hash: t.rootHash, Value: value, FullKey: prefix.Key})
+	return value, nil
 }
 
 // Remove removes the given key from the trie
@@ -824,9 +823,9 @@ func (t *TrieDB[H, Hasher]) lookupNode(hash H, key nibbles.Prefix) (storageHandl
 			return nil, ErrIncompleteDB
 		}
 
-		t.recordAccess(EncodedNodeAccess[H]{Hash: t.rootHash, EncodedNode: *encodedNode})
+		t.recordAccess(EncodedNodeAccess[H]{Hash: t.rootHash, EncodedNode: encodedNode})
 
-		return newNodeFromEncoded[H](hash, *encodedNode, &t.storage)
+		return newNodeFromEncoded[H](hash, encodedNode, &t.storage)
 	}
 	// We only check the `cache` for a node with `get_node` and don't insert
 	// the node if it wasn't there, because in substrate we only access the node while computing

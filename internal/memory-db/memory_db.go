@@ -7,8 +7,8 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-type dataRC[T any] struct {
-	Data T
+type dataRC struct {
+	Data []byte
 	RC   int32
 }
 
@@ -21,31 +21,31 @@ type Value interface {
 	~[]byte
 }
 
-type MemoryDB[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key], T Value] struct {
-	data           map[Key]dataRC[T]
+type MemoryDB[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key]] struct {
+	data           map[Key]dataRC
 	hashedNullNode H
-	nullNodeData   T
+	nullNodeData   []byte
 }
 
-func NewMemoryDB[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key], T Value](
+func NewMemoryDB[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key]](
 	data []byte,
-) MemoryDB[H, Hasher, Key, KF, T] {
-	return newMemoryDBFromNullNode[H, Hasher, Key, KF, T](data, data)
+) MemoryDB[H, Hasher, Key, KF] {
+	return newMemoryDBFromNullNode[H, Hasher, Key, KF](data, data)
 }
 
 func newMemoryDBFromNullNode[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key], T Value](
 	nullKey []byte,
 	nullNodeData T,
-) MemoryDB[H, Hasher, Key, KF, T] {
-	return MemoryDB[H, Hasher, Key, KF, T]{
-		data:           make(map[Key]dataRC[T]),
+) MemoryDB[H, Hasher, Key, KF] {
+	return MemoryDB[H, Hasher, Key, KF]{
+		data:           make(map[Key]dataRC),
 		hashedNullNode: (*new(Hasher)).Hash(nullKey),
 		nullNodeData:   nullNodeData,
 	}
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Clone() MemoryDB[H, Hasher, Key, KF, T] {
-	return MemoryDB[H, Hasher, Key, KF, T]{
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Clone() MemoryDB[H, Hasher, Key, KF] {
+	return MemoryDB[H, Hasher, Key, KF]{
 		data:           maps.Clone(mdb.data),
 		hashedNullNode: mdb.hashedNullNode,
 		nullNodeData:   mdb.nullNodeData,
@@ -53,7 +53,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Clone() MemoryDB[H, Hasher, Key, KF,
 }
 
 // / Purge all zero-referenced data from the database.
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Purge() {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Purge() {
 	for k, val := range mdb.data {
 		if val.RC == 0 {
 			delete(mdb.data, k)
@@ -62,9 +62,9 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Purge() {
 }
 
 // / Return the internal key-value Map, clearing the current state.
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Drain() map[Key]dataRC[T] {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Drain() map[Key]dataRC {
 	data := mdb.data
-	mdb.data = make(map[Key]dataRC[T])
+	mdb.data = make(map[Key]dataRC)
 	return data
 }
 
@@ -73,9 +73,9 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Drain() map[Key]dataRC[T] {
 // /
 // / Even when Some is returned, the data is only guaranteed to be useful
 // / when the refs > 0.
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) raw(key H, prefix hashdb.Prefix) *dataRC[T] {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) raw(key H, prefix hashdb.Prefix) *dataRC {
 	if key == mdb.hashedNullNode {
-		return &dataRC[T]{mdb.nullNodeData, 1}
+		return &dataRC{mdb.nullNodeData, 1}
 	}
 	kfKey := (*new(KF)).Key(key, prefix)
 	data, ok := mdb.data[kfKey]
@@ -86,7 +86,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) raw(key H, prefix hashdb.Prefix) *da
 }
 
 // / Consolidate all the entries of `other` into `self`.
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Consolidate(other *MemoryDB[H, Hasher, Key, KF, T]) {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Consolidate(other *MemoryDB[H, Hasher, Key, KF]) {
 	for key, value := range other.Drain() {
 		entry, ok := mdb.data[key]
 		if ok {
@@ -97,7 +97,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Consolidate(other *MemoryDB[H, Hashe
 			entry.RC += value.RC
 			mdb.data[key] = entry
 		} else {
-			mdb.data[key] = dataRC[T]{
+			mdb.data[key] = dataRC{
 				Data: value.Data,
 				RC:   value.RC,
 			}
@@ -107,7 +107,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Consolidate(other *MemoryDB[H, Hashe
 
 // / Remove an element and delete it from storage if reference count reaches zero.
 // / If the value was purged, return the old value.
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) removeAndPurge(key H, prefix hashdb.Prefix) *T {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) removeAndPurge(key H, prefix hashdb.Prefix) []byte {
 	if key == mdb.hashedNullNode {
 		return nil
 	}
@@ -116,32 +116,32 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) removeAndPurge(key H, prefix hashdb.
 	if ok {
 		if data.RC == 1 {
 			delete(mdb.data, kfKey)
-			return &data.Data
+			return data.Data
 		}
 		data.RC -= 1
 		mdb.data[kfKey] = data
 		return nil
 	}
-	mdb.data[kfKey] = dataRC[T]{RC: -1}
+	mdb.data[kfKey] = dataRC{RC: -1}
 	return nil
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Get(key H, prefix hashdb.Prefix) *T {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Get(key H, prefix hashdb.Prefix) []byte {
 	if key == mdb.hashedNullNode {
-		return &mdb.nullNodeData
+		return mdb.nullNodeData
 	}
 
 	kfKey := (*new(KF)).Key(key, prefix)
 	data, ok := mdb.data[kfKey]
 	if ok {
 		if data.RC > 0 {
-			return &data.Data
+			return data.Data
 		}
 	}
 	return nil
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Contains(key H, prefix hashdb.Prefix) bool {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Contains(key H, prefix hashdb.Prefix) bool {
 	if key == mdb.hashedNullNode {
 		return true
 	}
@@ -156,7 +156,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Contains(key H, prefix hashdb.Prefix
 	return false
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Emplace(key H, prefix hashdb.Prefix, value T) {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Emplace(key H, prefix hashdb.Prefix, value []byte) {
 	if string(mdb.nullNodeData) == string(value) {
 		return
 	}
@@ -170,21 +170,21 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Emplace(key H, prefix hashdb.Prefix,
 		data.RC += 1
 		mdb.data[kfKey] = data
 	} else {
-		mdb.data[kfKey] = dataRC[T]{value, 1}
+		mdb.data[kfKey] = dataRC{value, 1}
 	}
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Insert(prefix hashdb.Prefix, value []byte) H {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Insert(prefix hashdb.Prefix, value []byte) H {
 	if string(mdb.nullNodeData) == string(value) {
 		return mdb.hashedNullNode
 	}
 
 	key := (*new(Hasher)).Hash(value)
-	mdb.Emplace(key, prefix, T(value))
+	mdb.Emplace(key, prefix, value)
 	return key
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Remove(key H, prefix hashdb.Prefix) {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Remove(key H, prefix hashdb.Prefix) {
 	if key == mdb.hashedNullNode {
 		return
 	}
@@ -195,11 +195,11 @@ func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Remove(key H, prefix hashdb.Prefix) 
 		data.RC -= 1
 		mdb.data[kfKey] = data
 	} else {
-		mdb.data[kfKey] = dataRC[T]{RC: -1}
+		mdb.data[kfKey] = dataRC{RC: -1}
 	}
 }
 
-func (mdb *MemoryDB[H, Hasher, Key, KF, T]) Keys() map[Key]int32 {
+func (mdb *MemoryDB[H, Hasher, Key, KF]) Keys() map[Key]int32 {
 	keyCounts := make(map[Key]int32)
 	for key, drc := range mdb.data {
 		if drc.RC != 0 {
