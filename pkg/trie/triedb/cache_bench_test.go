@@ -90,7 +90,7 @@ func Benchmark_NodesCache(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			// Iterate through all keys
-			iter, err := newRawIterator(trieDB)
+			iter, err := NewTrieDBRawIterator(trieDB)
 			require.NoError(b, err)
 			for entry, err := iter.NextItem(); entry != nil && err == nil; entry, err = iter.NextItem() {
 			}
@@ -104,7 +104,7 @@ func Benchmark_NodesCache(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			// Iterate through all keys
-			iter, err := newRawIterator(trieDB)
+			iter, err := NewTrieDBRawIterator(trieDB)
 			require.NoError(b, err)
 			for entry, err := iter.NextItem(); entry != nil && err == nil; entry, err = iter.NextItem() {
 			}

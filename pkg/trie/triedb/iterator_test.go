@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_rawIterator(t *testing.T) {
+func Test_TrieDBRawIterator(t *testing.T) {
 	entries := map[string][]byte{
 		"no":           make([]byte, 1),
 		"noot":         make([]byte, 2),
@@ -36,7 +36,7 @@ func Test_rawIterator(t *testing.T) {
 	assert.NoError(t, trieDB.commit())
 
 	t.Run("iterate_over_all_raw_items", func(t *testing.T) {
-		iter, err := newRawIterator(trieDB)
+		iter, err := NewTrieDBRawIterator(trieDB)
 		assert.NoError(t, err)
 
 		i := 0
@@ -52,7 +52,7 @@ func Test_rawIterator(t *testing.T) {
 	})
 
 	t.Run("iterate_over_all_entries", func(t *testing.T) {
-		iter, err := newRawIterator(trieDB)
+		iter, err := NewTrieDBRawIterator(trieDB)
 		assert.NoError(t, err)
 
 		i := 0
@@ -70,7 +70,7 @@ func Test_rawIterator(t *testing.T) {
 	})
 
 	t.Run("seek", func(t *testing.T) {
-		iter, err := newRawIterator(trieDB)
+		iter, err := NewTrieDBRawIterator(trieDB)
 		assert.NoError(t, err)
 
 		found, err := iter.seek([]byte("no"), true)
@@ -89,7 +89,7 @@ func Test_rawIterator(t *testing.T) {
 	})
 
 	t.Run("seek_leaf", func(t *testing.T) {
-		iter, err := newRawIterator(trieDB)
+		iter, err := NewTrieDBRawIterator(trieDB)
 		assert.NoError(t, err)
 
 		found, err := iter.seek([]byte("dimartiro"), true)
@@ -103,7 +103,7 @@ func Test_rawIterator(t *testing.T) {
 	})
 
 	t.Run("iterate_over_all_prefixed_entries", func(t *testing.T) {
-		iter, err := newPrefixedRawIterator(trieDB, []byte("no"))
+		iter, err := NewPrefixedTrieDBRawIterator(trieDB, []byte("no"))
 		assert.NoError(t, err)
 
 		i := 0
@@ -121,7 +121,7 @@ func Test_rawIterator(t *testing.T) {
 	})
 
 	t.Run("prefixed_raw_iterator", func(t *testing.T) {
-		iter, err := newPrefixedRawIterator(trieDB, []byte("noot"))
+		iter, err := NewPrefixedTrieDBRawIterator(trieDB, []byte("noot"))
 		assert.NoError(t, err)
 
 		item, err := iter.NextItem()
@@ -131,7 +131,7 @@ func Test_rawIterator(t *testing.T) {
 	})
 
 	t.Run("iterate_over_all_prefixed_entries_then_seek", func(t *testing.T) {
-		iter, err := newPrefixedRawIteratorThenSeek(trieDB, []byte("no"), []byte("noot"))
+		iter, err := NewPrefixedTrieDBRawIteratorThenSeek(trieDB, []byte("no"), []byte("noot"))
 		assert.NoError(t, err)
 
 		i := 0

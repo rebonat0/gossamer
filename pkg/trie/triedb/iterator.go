@@ -116,7 +116,7 @@ func (ri rawItem[H]) extractKey() *extractedKey {
 	}
 }
 
-type rawIterator[H hash.Hash, Hasher hash.Hasher[H]] struct {
+type TrieDBRawIterator[H hash.Hash, Hasher hash.Hasher[H]] struct {
 	// Forward trail of nodes to visit.
 	trail []crumb[H]
 	// Forward iteration key nibbles of the current node.
@@ -125,9 +125,9 @@ type rawIterator[H hash.Hash, Hasher hash.Hasher[H]] struct {
 }
 
 // Create a new iterator.
-func newRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
+func NewTrieDBRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
 	db *TrieDB[H, Hasher],
-) (*rawIterator[H, Hasher], error) {
+) (*TrieDBRawIterator[H, Hasher], error) {
 	rootNode, rootHash, err := db.getNodeOrLookup(
 		codec.HashedNode[H]{Hash: db.rootHash},
 		nibbles.Prefix{},
@@ -137,7 +137,7 @@ func newRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
 		return nil, err
 	}
 
-	r := rawIterator[H, Hasher]{
+	r := TrieDBRawIterator[H, Hasher]{
 		db: db,
 	}
 	r.descend(rootNode, rootHash)
@@ -145,10 +145,10 @@ func newRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
 }
 
 // Create a new iterator, but limited to a given prefix.
-func newPrefixedRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
+func NewPrefixedTrieDBRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
 	db *TrieDB[H, Hasher], prefix []byte,
-) (*rawIterator[H, Hasher], error) {
-	iter, err := newRawIterator(db)
+) (*TrieDBRawIterator[H, Hasher], error) {
+	iter, err := NewTrieDBRawIterator(db)
 	if err != nil {
 		return nil, err
 	}
@@ -162,10 +162,10 @@ func newPrefixedRawIterator[H hash.Hash, Hasher hash.Hasher[H]](
 // Create a new iterator, but limited to a given prefix.
 // It then do a seek operation from prefixed context (using seek lose
 // prefix context by default).
-func newPrefixedRawIteratorThenSeek[H hash.Hash, Hasher hash.Hasher[H]](
+func NewPrefixedTrieDBRawIteratorThenSeek[H hash.Hash, Hasher hash.Hasher[H]](
 	db *TrieDB[H, Hasher], prefix []byte, seek []byte,
-) (*rawIterator[H, Hasher], error) {
-	iter, err := newRawIterator(db)
+) (*TrieDBRawIterator[H, Hasher], error) {
+	iter, err := NewTrieDBRawIterator(db)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func newPrefixedRawIteratorThenSeek[H hash.Hash, Hasher hash.Hasher[H]](
 }
 
 // Descend into a node.
-func (ri *rawIterator[H, Hasher]) descend(node codec.EncodedNode, nodeHash *H) {
+func (ri *TrieDBRawIterator[H, Hasher]) descend(node codec.EncodedNode, nodeHash *H) {
 	ri.trail = append(ri.trail, crumb[H]{
 		hash:   nodeHash,
 		status: statusEntering{},
@@ -191,7 +191,7 @@ func (ri *rawIterator[H, Hasher]) descend(node codec.EncodedNode, nodeHash *H) {
 // share its prefix with the node.
 // This indicates if there is still nodes to iterate over in the case
 // where we limit iteration to key as a prefix.
-func (ri *rawIterator[H, Hasher]) seek(keyBytes []byte, fwd bool) (bool, error) {
+func (ri *TrieDBRawIterator[H, Hasher]) seek(keyBytes []byte, fwd bool) (bool, error) {
 	ri.trail = nil
 	ri.keyNibbles.Clear()
 	key := nibbles.NewNibbles(keyBytes)
@@ -272,7 +272,7 @@ func (ri *rawIterator[H, Hasher]) seek(keyBytes []byte, fwd bool) (bool, error) 
 
 // Advance the iterator into a prefix, no value out of the prefix will be accessed
 // or returned after this operation.
-func (ri *rawIterator[H, Hasher]) prefix(prefix []byte, fwd bool) error {
+func (ri *TrieDBRawIterator[H, Hasher]) prefix(prefix []byte, fwd bool) error {
 	found, err := ri.seek(prefix, fwd)
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func (ri *rawIterator[H, Hasher]) prefix(prefix []byte, fwd bool) error {
 
 // Advance the iterator into a prefix, no value out of the prefix will be accessed
 // or returned after this operation.
-func (ri *rawIterator[H, Hasher]) prefixThenSeek(prefix []byte, seek []byte) error {
+func (ri *TrieDBRawIterator[H, Hasher]) prefixThenSeek(prefix []byte, seek []byte) error {
 	if len(prefix) == 0 {
 		// Theres no prefix, so just seek.
 		_, err := ri.seek(seek, true)
@@ -357,7 +357,7 @@ func (ri *rawIterator[H, Hasher]) prefixThenSeek(prefix []byte, seek []byte) err
 // Must be called with the same db as when the iterator was created.
 //
 // Specify fwd to indicate the direction of the iteration (true for forward).
-func (ri *rawIterator[H, Hasher]) nextRawItem(fwd bool) (*rawItem[H], error) {
+func (ri *TrieDBRawIterator[H, Hasher]) nextRawItem(fwd bool) (*rawItem[H], error) {
 	for {
 		if len(ri.trail) == 0 {
 			return nil, nil
@@ -431,7 +431,7 @@ func (ri *rawIterator[H, Hasher]) nextRawItem(fwd bool) (*rawItem[H], error) {
 // Fetches the next trie item.
 //
 // Must be called with the same db as when the iterator was created.
-func (ri *rawIterator[H, Hasher]) NextItem() (*TrieItem, error) {
+func (ri *TrieDBRawIterator[H, Hasher]) NextItem() (*TrieItem, error) {
 	for {
 		rawItem, err := ri.nextRawItem(true)
 		if err != nil {
@@ -465,6 +465,13 @@ func (ri *rawIterator[H, Hasher]) NextItem() (*TrieItem, error) {
 			panic("unreachable")
 		}
 	}
+}
+
+// / Fetches the next key.
+// /
+// / Must be called with the same `db` as when the iterator was created.
+func (ri *TrieDBRawIterator[H, Hasher]) NextKey() ([]byte, error) {
+	panic("unimpl")
 }
 
 type TrieItem struct {

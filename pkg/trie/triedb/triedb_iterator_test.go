@@ -57,7 +57,7 @@ func TestIterator(t *testing.T) {
 	assert.Equal(t, root.ToBytes(), trieDB.rootHash.Bytes())
 
 	t.Run("iterate_over_all_entries", func(t *testing.T) {
-		iter, err := newRawIterator(trieDB)
+		iter, err := NewTrieDBRawIterator(trieDB)
 		assert.NoError(t, err)
 
 		expected := inMemoryTrie.NextKey([]byte{})
@@ -76,7 +76,7 @@ func TestIterator(t *testing.T) {
 	})
 
 	t.Run("iterate_after_seeking", func(t *testing.T) {
-		iter, err := newRawIterator(trieDB)
+		iter, err := NewTrieDBRawIterator(trieDB)
 		assert.NoError(t, err)
 
 		found, err := iter.seek([]byte("not"), true)
