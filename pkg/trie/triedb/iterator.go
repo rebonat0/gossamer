@@ -471,7 +471,26 @@ func (ri *TrieDBRawIterator[H, Hasher]) NextItem() (*TrieItem, error) {
 // /
 // / Must be called with the same `db` as when the iterator was created.
 func (ri *TrieDBRawIterator[H, Hasher]) NextKey() ([]byte, error) {
-	panic("unimpl")
+	for {
+		rawItem, err := ri.nextRawItem(true)
+		if err != nil {
+			return nil, err
+		}
+		if rawItem == nil {
+			return nil, nil
+		}
+		extracted := rawItem.extractKey()
+		if extracted == nil {
+			continue
+		}
+		key := extracted.Key
+		maybeExtraNibble := extracted.Padding
+
+		if maybeExtraNibble != nil {
+			return nil, fmt.Errorf("ValueAtIncompleteKey: %v %v", key, *maybeExtraNibble)
+		}
+		return key, nil
+	}
 }
 
 type TrieItem struct {
