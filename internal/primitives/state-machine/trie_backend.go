@@ -2,11 +2,11 @@ package statemachine
 
 import (
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
-	"github.com/ChainSafe/gossamer/pkg/trie/cache"
+	triedb "github.com/ChainSafe/gossamer/pkg/trie/triedb"
 )
 
 // pub trait TrieCacheProvider<H: Hasher> {
-type TrieCacheProvider[H any] interface {
+type TrieCacheProvider[H runtime.Hash] interface {
 	// 	/// Cache type that implements [`trie_db::TrieCache`].
 	// 	type Cache<'a>: TrieCacheT<sp_trie::NodeCodec<H>> + 'a
 	// 	where
@@ -19,21 +19,21 @@ type TrieCacheProvider[H any] interface {
 	// 	/// NOTE: Implementors should use the `storage_root` to differentiate between storage keys that
 	// 	/// may belong to different tries.
 	// 	fn as_trie_db_cache(&self, storage_root: H::Out) -> Self::Cache<'_>;
-	TrieCache(storageRoot H) cache.TrieCache
+	TrieCache(storageRoot H) triedb.TrieCache[H]
 
 	// 	/// Returns a cache that can be used with a [`trie_db::TrieDBMut`].
 	// 	///
 	// 	/// When finished with the operation on the trie, it is required to call [`Self::merge`] to
 	// 	/// merge the cached items for the correct `storage_root`.
 	// 	fn as_trie_db_mut_cache(&self) -> Self::Cache<'_>;
-	NewTrieCache() cache.TrieCache
+	NewTrieCache() triedb.TrieCache[H]
 
 	// /// Merge the cached data in `other` into the provider using the given `new_root`.
 	// ///
 	// /// This must be used for the cache returned by [`Self::as_trie_db_mut_cache`] as otherwise the
 	// /// cached data is just thrown away.
 	// fn merge<'a>(&'a self, other: Self::Cache<'a>, new_root: H::Out);
-	Merge(other cache.TrieCache, newRoot H)
+	Merge(other triedb.TrieCache[H], newRoot H)
 }
 
 // / Patricia trie-based backend. Transaction type is an overlay of changes to commit.

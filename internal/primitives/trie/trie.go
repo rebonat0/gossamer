@@ -4,12 +4,10 @@ import (
 	"slices"
 
 	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
-	"github.com/ChainSafe/gossamer/internal/hash-db/wrapper"
 	memorydb "github.com/ChainSafe/gossamer/internal/memory-db"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/internal/primitives/storage"
 	"github.com/ChainSafe/gossamer/pkg/trie"
-	"github.com/ChainSafe/gossamer/pkg/trie/cache"
 	triedb "github.com/ChainSafe/gossamer/pkg/trie/triedb"
 )
 
@@ -18,12 +16,12 @@ import (
 // / key conflict for non random keys).
 // pub type PrefixedMemoryDB<H> = memory_db::MemoryDB<H, memory_db::PrefixedKey<H>, trie_db::DBValue>;
 type PrefixedMemoryDB[Hash runtime.Hash, Hasher hashdb.Hasher[Hash]] struct {
-	memorydb.MemoryDB[Hash, Hasher, Hash, memorydb.PrefixedKey[Hash], []byte]
+	memorydb.MemoryDB[Hash, Hasher, Hash, memorydb.PrefixedKey[Hash]]
 }
 
 func NewPrefixedMemoryDB[Hash runtime.Hash, Hasher hashdb.Hasher[Hash]]() *PrefixedMemoryDB[Hash, Hasher] {
 	return &PrefixedMemoryDB[Hash, Hasher]{
-		memorydb.NewMemoryDB[Hash, Hasher, Hash, memorydb.PrefixedKey[Hash], []byte]([]byte{0}),
+		memorydb.NewMemoryDB[Hash, Hasher, Hash, memorydb.PrefixedKey[Hash]]([]byte{0}),
 	}
 }
 
@@ -56,12 +54,12 @@ func NewPrefixedMemoryDB[Hash runtime.Hash, Hasher hashdb.Hasher[Hash]]() *Prefi
 // / an encoding scheme that avoid key conflict).
 // pub type MemoryDB<H> = memory_db::MemoryDB<H, memory_db::HashKey<H>, trie_db::DBValue>;
 type MemoryDB[Hash runtime.Hash, Hasher runtime.Hasher[Hash]] struct {
-	memorydb.MemoryDB[Hash, Hasher, Hash, memorydb.HashKey[Hash], []byte]
+	memorydb.MemoryDB[Hash, Hasher, Hash, memorydb.HashKey[Hash]]
 }
 
 func NewMemoryDB[Hash runtime.Hash, Hasher runtime.Hasher[Hash]]() *MemoryDB[Hash, Hasher] {
 	return &MemoryDB[Hash, Hasher]{
-		MemoryDB: memorydb.NewMemoryDB[Hash, Hasher, Hash, memorydb.HashKey[Hash], []byte]([]byte{0}),
+		MemoryDB: memorydb.NewMemoryDB[Hash, Hasher, Hash, memorydb.HashKey[Hash]]([]byte{0}),
 	}
 }
 
@@ -92,18 +90,18 @@ func VerifyTrieProof[TrieHash comparable](
 
 // / Determine a trie root given a hash DB and delta values.
 func DeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	root H,
 	delta []struct {
 		Key   []byte
 		Value []byte
 	},
 	recorder triedb.TrieRecorder,
-	cache cache.TrieCache,
+	cache triedb.TrieCache[H],
 	stateVersion storage.StateVersion,
 ) (H, error) {
 	// trie := triedb.NewTrieDBMutBuilderFromExisting[TrieHash](db, root).Build()
-	trieDB := triedb.NewTrieDB[H, Hasher](root, wrapper.New[H, Hasher](db), triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
+	trieDB := triedb.NewTrieDB[H, Hasher](root, db, triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
 	switch stateVersion {
 	case storage.StateVersionV0:
 	case storage.StateVersionV1:
@@ -145,46 +143,46 @@ func DeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
 
 // / Read a value from the trie.
 func ReadTrieValue[H runtime.Hash, Hasher runtime.Hasher[H]](
-	db hashdb.HashDB[H, []byte],
+	db hashdb.HashDB[H],
 	root H,
 	key []byte,
 	recorder triedb.TrieRecorder,
-	cache cache.TrieCache,
+	cache triedb.TrieCache[H],
 ) ([]byte, error) {
-	trieDB := triedb.NewTrieDB[H, Hasher](root, wrapper.New[H, Hasher](db), triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
+	trieDB := triedb.NewTrieDB[H, Hasher](root, db, triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
 	trieDB.SetVersion(trie.V1)
 	// TODO: modify triedb to return error on `Get`
 	return trieDB.Get(key), nil
 }
 
-type KeySpacedDB[Hash comparable, T any] struct {
-	DB     hashdb.HashDB[Hash, T]
+type KeySpacedDB[Hash comparable] struct {
+	DB     hashdb.HashDB[Hash]
 	Prefix []byte
 }
 
-func NewKeySpacedDB[Hash comparable, T any](db hashdb.HashDB[Hash, T], ks []byte) *KeySpacedDB[Hash, T] {
-	return &KeySpacedDB[Hash, T]{
+func NewKeySpacedDB[Hash comparable](db hashdb.HashDB[Hash], ks []byte) *KeySpacedDB[Hash] {
+	return &KeySpacedDB[Hash]{
 		DB:     db,
 		Prefix: ks,
 	}
 }
 
-func (tbe *KeySpacedDB[H, T]) Get(key H, prefix hashdb.Prefix) *T {
+func (tbe *KeySpacedDB[H]) Get(key H, prefix hashdb.Prefix) []byte {
 	panic("unimpl")
 }
 
-func (tbe *KeySpacedDB[H, T]) Contains(key H, prefix hashdb.Prefix) bool {
+func (tbe *KeySpacedDB[H]) Contains(key H, prefix hashdb.Prefix) bool {
 	return tbe.Get(key, prefix) != nil
 }
 
-func (tbe *KeySpacedDB[H, T]) Insert(prefix hashdb.Prefix, value []byte) H {
+func (tbe *KeySpacedDB[H]) Insert(prefix hashdb.Prefix, value []byte) H {
 	panic("unimplemented")
 }
 
-func (tbe *KeySpacedDB[H, T]) Emplace(key H, prefix hashdb.Prefix, value T) {
+func (tbe *KeySpacedDB[H]) Emplace(key H, prefix hashdb.Prefix, value []byte) {
 	panic("unimplemented")
 }
 
-func (tbe *KeySpacedDB[H, T]) Remove(key H, prefix hashdb.Prefix) {
+func (tbe *KeySpacedDB[H]) Remove(key H, prefix hashdb.Prefix) {
 	panic("unimplemented")
 }

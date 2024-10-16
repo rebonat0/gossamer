@@ -6,6 +6,7 @@ import (
 
 	"github.com/ChainSafe/gossamer/internal/database"
 	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
+	memorydb "github.com/ChainSafe/gossamer/internal/memory-db"
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	ptrie "github.com/ChainSafe/gossamer/internal/primitives/trie"
@@ -37,7 +38,7 @@ func (mdbw *memoryDBWrapper[H, Hasher]) Get(key []byte) (value []byte, err error
 	if val == nil {
 		return nil, fmt.Errorf("missing value")
 	}
-	value = []byte(*val)
+	value = val
 	return value, nil
 }
 func (mdbw *memoryDBWrapper[H, Hasher]) Put(key, value []byte) error {
@@ -106,9 +107,20 @@ var testData []struct {
 	},
 }
 
-func createTrie(t *testing.T) (db *memoryDBWrapper[hash.H256, runtime.BlakeTwo256], root hash.H256) {
+type MemoryDB = memorydb.MemoryDB[
+	hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256],
+]
+
+func newMemoryDB() *MemoryDB {
+	mdb := MemoryDB(memorydb.NewMemoryDB[
+		hash.H256, runtime.BlakeTwo256, hash.H256, memorydb.HashKey[hash.H256],
+	]([]byte{0}))
+	return &mdb
+}
+
+func createTrie(t *testing.T) (db *MemoryDB, root hash.H256) {
 	t.Helper()
-	db = newMemoryDBWrapper()
+	db = newMemoryDB()
 	trieDB := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
 	trieDB.SetVersion(trie.V1)
 
@@ -136,11 +148,8 @@ func TestRecorder(t *testing.T) {
 	storageProof := rec.DrainStorageProof()
 	memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
 
-	memDBW := newMemoryDBWrapper()
-	memDBW.MemoryDB = *memDB
-
 	// Check that we recorded the required data
-	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDBW)
+	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
 	trieDB.SetVersion(trie.V1)
 	require.Equal(t, testData[0].Value, trieDB.Get(testData[0].Key))
 }
@@ -192,10 +201,7 @@ func TestRecorder_TransactionsRollback(t *testing.T) {
 		storageProof := rec.StorageProof()
 		memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
 
-		// Check that we recorded the required data
-		memDBW := newMemoryDBWrapper()
-		memDBW.MemoryDB = *memDB
-		trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDBW)
+		trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
 		trieDB.SetVersion(trie.V1)
 
 		// Check that the required data is still present.
@@ -244,9 +250,7 @@ func TestRecorder_TransactionsCommit(t *testing.T) {
 	memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
 
 	// Check that we recorded the required data
-	memDBW := newMemoryDBWrapper()
-	memDBW.MemoryDB = *memDB
-	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDBW)
+	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
 	trieDB.SetVersion(trie.V1)
 
 	// Check that the required data is still present.
@@ -298,9 +302,7 @@ func TestRecorder_TransactionsCommitAndRollback(t *testing.T) {
 	memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
 
 	// Check that we recorded the required data
-	memDBW := newMemoryDBWrapper()
-	memDBW.MemoryDB = *memDB
-	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDBW)
+	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
 	trieDB.SetVersion(trie.V1)
 
 	// Check that the required data is still present.

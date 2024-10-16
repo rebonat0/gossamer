@@ -108,7 +108,7 @@ type IterArgs struct {
 
 	/// The info of the child trie over which to iterate over.
 	// 	pub child_info: Option<ChildInfo>,
-	ChildInfo *storage.ChildInfo
+	ChildInfo storage.ChildInfo
 
 	/// Whether to stop iteration when a missing trie node is reached.
 	///
