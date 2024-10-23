@@ -14,6 +14,12 @@ type StorageKey []byte
 // pub type StorageValue = Vec<u8>;
 type StorageValue []byte
 
+// Storage key and value.
+type StorageKeyValue struct {
+	StorageKey
+	StorageValue
+}
+
 // / In memory array of storage values.
 // pub type StorageCollection = Vec<(StorageKey, Option<StorageValue>)>;
 type StorageCollection []struct {

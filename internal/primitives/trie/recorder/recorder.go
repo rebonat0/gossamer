@@ -66,6 +66,12 @@ type Recorder[H runtime.Hash] struct {
 	encodedSizeEstimation uint
 }
 
+func NewRecorder[H runtime.Hash]() *Recorder[H] {
+	return &Recorder[H]{
+		inner: newRecorderInner[H](),
+	}
+}
+
 // / Returns the recorder as [`TrieRecorder`](trie_db::TrieRecorder) compatible type.
 // /
 // / - `storage_root`: The storage root of the trie for which accesses are recorded. This is
@@ -292,6 +298,20 @@ func (tr *trieRecorder[H]) Record(access triedb.TrieAccess) {
 
 	var encodedSizeUpdate uint
 	switch access := access.(type) {
+	case triedb.CachedNodeAccess[H]:
+		log.Printf("TRACE: Recording node: %v", access.Hash)
+		_, ok := tr.inner.accessedNodes[access.Hash]
+		if !ok {
+			node := access.Node.Encoded()
+			encodedSizeUpdate += uint(len(scale.MustMarshal(node)))
+
+			if len(tr.inner.transactions) > 0 {
+				tx := tr.inner.transactions[len(tr.inner.transactions)-1]
+				tx.accessedNodes[access.Hash] = true
+				tr.inner.transactions[len(tr.inner.transactions)-1] = tx
+			}
+			tr.inner.accessedNodes[access.Hash] = node
+		}
 	case triedb.EncodedNodeAccess[H]:
 		log.Printf("TRACE: Recording node: %v", access.Hash)
 		_, ok := tr.inner.accessedNodes[access.Hash]

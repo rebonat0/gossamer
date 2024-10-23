@@ -99,19 +99,14 @@ func (ri *RawIter[H, Hasher]) NextKey(backend *TrieBackend[H, Hasher]) (StorageK
 	return storageKey, nil
 }
 
-type Pair struct {
-	Key   []byte
-	Value []byte
-}
-
-func (ri *RawIter[H, Hasher]) NextPair(backend *TrieBackend[H, Hasher]) (*Pair, error) {
+func (ri *RawIter[H, Hasher]) NextKeyValue(backend *TrieBackend[H, Hasher]) (*StorageKeyValue, error) {
 	skipIfFirst := ri.skipIfFirst
 	ri.skipIfFirst = nil
 
-	pair, err := prepare[H, Hasher, Pair](
+	pair, err := prepare[H, Hasher, StorageKeyValue](
 		ri,
 		&backend.Essence,
-		func(trie *triedb.TrieDB[H, Hasher], trieIter triedb.TrieDBRawIterator[H, Hasher]) (*Pair, error) {
+		func(trie *triedb.TrieDB[H, Hasher], trieIter triedb.TrieDBRawIterator[H, Hasher]) (*StorageKeyValue, error) {
 			result, err := trieIter.NextItem()
 			if err != nil {
 				return nil, err
@@ -126,12 +121,12 @@ func (ri *RawIter[H, Hasher]) NextPair(backend *TrieBackend[H, Hasher]) (*Pair, 
 					}
 				}
 			}
-			return &Pair{result.Key, result.Value}, nil
+			return &StorageKeyValue{result.Key, result.Value}, nil
 		})
 	return pair, err
 }
 
-func (ri *RawIter[H, Hasher]) WasComplete() bool {
+func (ri *RawIter[H, Hasher]) Complete() bool {
 	return ri.state == FinishedComplete
 }
 

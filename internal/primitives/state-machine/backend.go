@@ -120,28 +120,25 @@ type IterArgs struct {
 }
 
 // / A trait for a raw storage iterator.
-// type StorageIterator[H HasherOut, Backend any] interface {
-// 	// 	/// Fetches the next key from the storage.
-// 	// 	fn next_key(
-// 	// 		&mut self,
-// 	// 		backend: &Self::Backend,
-// 	// 	) -> Option<core::result::Result<StorageKey, Self::Error>>;
-// 	NextKey(backend Backend[H, T]) (overlayedchanges.StorageKey, error)
+type StorageIterator[Hash runtime.Hash, Hasher runtime.Hasher[Hash]] interface {
+	/// Fetches the next key from the storage.
+	// 	fn next_key(
+	// 		&mut self,
+	// 		backend: &Self::Backend,
+	// 	) -> Option<core::result::Result<StorageKey, Self::Error>>;
+	NextKey(backend *TrieBackend[Hash, Hasher]) (StorageKey, error)
 
-// 	// 	/// Fetches the next key and value from the storage.
-// 	// 	fn next_pair(
-// 	// 		&mut self,
-// 	// 		backend: &Self::Backend,
-// 	// 	) -> Option<core::result::Result<(StorageKey, StorageValue), Self::Error>>;
-// 	NextPair(backend Backend[H, T]) (struct {
-// 		overlayedchanges.StorageKey
-// 		overlayedchanges.StorageValue
-// 	}, error)
+	/// Fetches the next key and value from the storage.
+	// 	fn next_pair(
+	// 		&mut self,
+	// 		backend: &Self::Backend,
+	// 	) -> Option<core::result::Result<(StorageKey, StorageValue), Self::Error>>;
+	NextKeyValue(backend *TrieBackend[Hash, Hasher]) (*StorageKeyValue, error)
 
-// 	/// Returns whether the end of iteration was reached without an error.
-// 	// fn was_complete(&self) -> bool;
-// 	WasComplete() bool
-// }
+	/// Returns whether the end of iteration was reached without an error.
+	// fn was_complete(&self) -> bool;
+	Complete() bool
+}
 
 // / An iterator over storage keys and values.
 // pub struct PairsIter<'a, H, I>
