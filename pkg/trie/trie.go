@@ -5,6 +5,7 @@ package trie
 
 import (
 	"fmt"
+	"iter"
 
 	"github.com/ChainSafe/gossamer/lib/common"
 	"github.com/ChainSafe/gossamer/pkg/trie/tracking"
@@ -35,10 +36,6 @@ type KVStoreWrite interface {
 }
 
 type TrieIterator interface {
-	// NextKey performs a depth-first search on the trie and returns the next key
-	// and value based on the current state of the iterator.
-	NextEntry() (entry *Entry)
-
 	// NextKey performs a depth-first search on the trie and returns the next key
 	// based on the current state of the iterator.
 	NextKey() (nextKey []byte)
@@ -84,6 +81,7 @@ type TrieRead interface {
 	Entries() (keyValueMap map[string][]byte)
 	NextKey(key []byte) []byte
 	GetKeysWithPrefix(prefix []byte) (keysLE [][]byte)
+	PrefixedKeys(prefix []byte) iter.Seq[[]byte]
 }
 
 type Trie interface {

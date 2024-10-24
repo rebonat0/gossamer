@@ -214,8 +214,7 @@ func (t *TrieState) ClearPrefix(prefix []byte) error {
 	if currentTx := t.getCurrentTransaction(); currentTx != nil {
 		keysOnState := make([]string, 0)
 
-		iter := t.state.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range t.state.PrefixedKeys(prefix) {
 			keysOnState = append(keysOnState, string(key))
 		}
 
@@ -235,8 +234,7 @@ func (t *TrieState) ClearPrefixLimit(prefix []byte, limit uint32) (
 	if currentTx := t.getCurrentTransaction(); currentTx != nil {
 		keysOnState := make([]string, 0)
 
-		iter := t.state.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range t.state.PrefixedKeys(prefix) {
 			keysOnState = append(keysOnState, string(key))
 		}
 
@@ -430,8 +428,7 @@ func (t *TrieState) ClearPrefixInChild(keyToChild, prefix []byte) error {
 		}
 
 		var onStateKeys []string
-		iter := child.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range child.PrefixedKeys(prefix) {
 			onStateKeys = append(onStateKeys, string(key))
 		}
 
@@ -466,8 +463,7 @@ func (t *TrieState) ClearPrefixInChildWithLimit(keyToChild, prefix []byte, limit
 		}
 
 		var onStateKeys []string
-		iter := child.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range child.PrefixedKeys(prefix) {
 			onStateKeys = append(onStateKeys, string(key))
 		}
 

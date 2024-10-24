@@ -6,6 +6,7 @@ package inmemory
 import (
 	"bytes"
 	"fmt"
+	"iter"
 
 	"github.com/ChainSafe/gossamer/pkg/trie"
 	"github.com/ChainSafe/gossamer/pkg/trie/codec"
@@ -46,16 +47,8 @@ func NewInMemoryTrieIterator(opts ...IterOpts) *InMemoryTrieIterator {
 	return iter
 }
 
-func (t *InMemoryTrieIterator) NextEntry() *trie.Entry {
-	found := findNextNode(t.trie.root, []byte(nil), t.cursorAtKey)
-	if found != nil {
-		t.cursorAtKey = found.Key
-	}
-	return found
-}
-
 func (t *InMemoryTrieIterator) NextKey() []byte {
-	entry := t.NextEntry()
+	entry := findNextNode(t.trie.root, []byte(nil), t.cursorAtKey)
 	if entry != nil {
 		return codec.NibblesToKeyLE(entry.Key)
 	}
@@ -64,8 +57,7 @@ func (t *InMemoryTrieIterator) NextKey() []byte {
 
 // NextKeyFunc advance the iterator until the predicate condition meets
 func (t *InMemoryTrieIterator) NextKeyFunc(predicate func(nextKey []byte) bool) (nextKey []byte) {
-	for entry := t.NextEntry(); entry != nil; entry = t.NextEntry() {
-		key := codec.NibblesToKeyLE(entry.Key)
+	for key := t.NextKey(); key != nil; key = t.NextKey() {
 		if predicate(key) {
 			return key
 		}
@@ -85,6 +77,18 @@ func (t *InMemoryTrie) Entries() (keyValueMap map[string][]byte) {
 	keyValueMap = make(map[string][]byte)
 	t.buildEntriesMap(t.root, nil, keyValueMap)
 	return keyValueMap
+}
+
+func (t *InMemoryTrie) PrefixedKeys(prefix []byte) iter.Seq[[]byte] {
+	iter := t.PrefixedIter(prefix)
+
+	return func(yield func([]byte) bool) {
+		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+			if !yield(key) {
+				return
+			}
+		}
+	}
 }
 
 // NextKey returns the next key in the trie in lexicographic order.
