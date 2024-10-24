@@ -3,39 +3,46 @@ package cache
 import (
 	"sync"
 
+	costlru "github.com/ChainSafe/gossamer/internal/cost-lru"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
-	"github.com/maypok86/otter"
+	"github.com/dolthub/maphash"
+	"github.com/elastic/go-freelru"
 )
+
+type hasher[K comparable] struct {
+	maphash.Hasher[K]
+}
+
+func (h hasher[K]) Hash(key K) uint32 {
+	return uint32(h.Hasher.Hash(key))
+}
 
 // / The shared node cache.
 // /
 // / Internally this stores all cached nodes in a [`LruMap`]. It ensures that when updating the
 // / cache, that the cache stays within its allowed bounds.
 type SharedNodeCache[H runtime.Hash] struct {
-	// 	/// The cached nodes, ordered by least recently used.
-	// 	pub(super) lru: SharedNodeCacheMap<H>,
-	cache        otter.Cache[H, triedb.CachedNode[H]]
+	/// The cached nodes, ordered by least recently used.
+	lru          *costlru.LRU[H, triedb.CachedNode[H]]
 	itemsEvicted uint
 }
 
 func NewSharedNodeCache[H runtime.Hash](sizeBytes uint) *SharedNodeCache[H] {
 	snc := SharedNodeCache[H]{}
 	itemsEvictedPtr := &snc.itemsEvicted
+	h := hasher[H]{maphash.NewHasher[H]()}
 	var err error
-	snc.cache, err = otter.MustBuilder[H, triedb.CachedNode[H]](int(sizeBytes)).
-		Cost(func(hash H, node triedb.CachedNode[H]) uint32 {
-			return uint32(node.ByteSize())
-		}).
-		DeletionListener(func(_ H, _ triedb.CachedNode[H], cause otter.DeletionCause) {
-			if cause == otter.Size {
-				(*itemsEvictedPtr)++
-			}
-		}).
-		Build()
+
+	snc.lru, err = costlru.New(sizeBytes, h.Hash, func(hash H, node triedb.CachedNode[H]) uint32 {
+		return uint32(node.ByteSize())
+	})
 	if err != nil {
 		panic(err)
 	}
+	snc.lru.SetOnEvict(func(h H, cn triedb.CachedNode[H]) {
+		(*itemsEvictedPtr)++
+	})
 	return &snc
 }
 
@@ -50,10 +57,10 @@ func (snc *SharedNodeCache[H]) Update(list []UpdateItem[H]) {
 	addCount := uint(0)
 
 	snc.itemsEvicted = 0
-	maxItemsEvicted := uint(snc.cache.Size()*100) / SharedNodeCacheMaxReplacePercent
+	maxItemsEvicted := uint(snc.lru.Len()*100) / SharedNodeCacheMaxReplacePercent
 	for _, ui := range list {
 		if ui.NodeCached.FromSharedCache {
-			_, ok := snc.cache.Get(ui.Hash)
+			_, ok := snc.lru.Get(ui.Hash)
 			if ok {
 				accessCount++
 				if accessCount >= SharedNodeCacheMaxPromotedKeys {
@@ -64,8 +71,8 @@ func (snc *SharedNodeCache[H]) Update(list []UpdateItem[H]) {
 			}
 		}
 
-		ok := snc.cache.Set(ui.Hash, ui.NodeCached.Node)
-		if ok {
+		added, _ := snc.lru.Add(ui.Hash, ui.NodeCached.Node)
+		if added {
 			addCount++
 		}
 
@@ -91,9 +98,10 @@ func (snc *SharedNodeCache[H]) Update(list []UpdateItem[H]) {
 }
 
 func (snc *SharedNodeCache[H]) Reset() {
-	snc.cache.Clear()
+	snc.lru.Purge()
 }
 
+// / The hash that identifies this instance of `storage_root` and `storage_key`.
 type ValueCacheKeyHash[H runtime.Hash] struct {
 	StorageRoot H
 	StorageKey  string
@@ -107,18 +115,13 @@ func (vckh ValueCacheKeyHash[H]) ValueCacheKey() ValueCacheKey[H] {
 }
 
 // / The key type that is being used to address a [`CachedValue`].
-// #[derive(Eq)]
-// pub(super) struct ValueCacheKey<H> {
 type ValueCacheKey[H runtime.Hash] struct {
-	// /// The storage root of the trie this key belongs to.
-	// pub storage_root: H,
+	/// The storage root of the trie this key belongs to.
 	StorageRoot H
-	// /// The key to access the value in the storage.
-	// pub storage_key: Arc<[u8]>,
+	/// The key to access the value in the storage.
 	StorageKey []byte
 	// /// The hash that identifies this instance of `storage_root` and `storage_key`.
 	// pub hash: ValueCacheKeyHash,
-	// Hash ValueCacheKeyHash[H]
 }
 
 func (vck ValueCacheKey[H]) ValueCacheKeyHash() ValueCacheKeyHash[H] {
@@ -132,7 +135,7 @@ func (vck ValueCacheKey[H]) ValueCacheKeyHash() ValueCacheKeyHash[H] {
 // /
 // / The cache ensures that it stays in the configured size bounds.
 type SharedValueCache[H runtime.Hash] struct {
-	cache        otter.Cache[ValueCacheKeyHash[H], triedb.CachedValue[H]]
+	lru          *costlru.LRU[ValueCacheKeyHash[H], triedb.CachedValue[H]]
 	itemsEvicted uint
 }
 
@@ -140,30 +143,27 @@ func NewSharedValueCache[H runtime.Hash](size uint) *SharedValueCache[H] {
 	var svc SharedValueCache[H]
 	itemsEvictedPtr := &svc.itemsEvicted
 	var err error
+	h := hasher[ValueCacheKeyHash[H]]{maphash.NewHasher[ValueCacheKeyHash[H]]()}
 
-	svc.cache, err = otter.MustBuilder[ValueCacheKeyHash[H], triedb.CachedValue[H]](int(size)).
-		Cost(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) uint32 {
-			keyCost := uint32(len(key.StorageKey))
-			switch value := value.(type) {
-			case triedb.NonExistingCachedValue[H]:
-				return keyCost + 1
-			case triedb.ExistingHashCachedValue[H]:
-				return keyCost + uint32(value.Hash.Length())
-			case triedb.ExistingCachedValue[H]:
-				return keyCost + uint32(value.Hash.Length()+len(value.Data))
-			default:
-				panic("unreachable")
-			}
-		}).
-		DeletionListener(func(_ ValueCacheKeyHash[H], _ triedb.CachedValue[H], cause otter.DeletionCause) {
-			if cause == otter.Size {
-				(*itemsEvictedPtr)++
-			}
-		}).
-		Build()
+	svc.lru, err = costlru.New(size, h.Hash, func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) uint32 {
+		keyCost := uint32(len(key.StorageKey))
+		switch value := value.(type) {
+		case triedb.NonExistingCachedValue[H]:
+			return keyCost + 1
+		case triedb.ExistingHashCachedValue[H]:
+			return keyCost + uint32(value.Hash.Length())
+		case triedb.ExistingCachedValue[H]:
+			return keyCost + uint32(value.Hash.Length()+len(value.Data))
+		default:
+			panic("unreachable")
+		}
+	})
 	if err != nil {
 		panic(err)
 	}
+	svc.lru.SetOnEvict(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) {
+		(*itemsEvictedPtr)++
+	})
 	return &svc
 }
 
@@ -182,7 +182,7 @@ func (svc *SharedValueCache[H]) Update(added []SharedValueCacheAdded[H], accesse
 		// Since we are only comparing the hashes here it may lead us to promoting the wrong
 		// values as the most recently accessed ones. However this is harmless as the only
 		// consequence is that we may accidentally prune a recently used value too early.
-		_, ok := svc.cache.Get(hash)
+		_, ok := svc.lru.Get(hash)
 		if ok {
 			accessCount++
 		}
@@ -194,11 +194,11 @@ func (svc *SharedValueCache[H]) Update(added []SharedValueCacheAdded[H], accesse
 	// we don't evict the whole shared cache nor we keep spinning our wheels
 	// evicting items which we've added ourselves in previous iterations of this loop.
 	svc.itemsEvicted = 0
-	maxItemsEvicted := uint(svc.cache.Size()) * 100 / SharedValueCacheMaxReplacePercent
+	maxItemsEvicted := uint(svc.lru.Len()) * 100 / SharedValueCacheMaxReplacePercent
 
 	for _, svca := range added {
-		set := svc.cache.Set(svca.ValueCacheKey.ValueCacheKeyHash(), svca.CachedValue)
-		if set {
+		added, _ := svc.lru.Add(svca.ValueCacheKey.ValueCacheKeyHash(), svca.CachedValue)
+		if added {
 			addCount++
 		}
 
@@ -225,15 +225,12 @@ func (svc *SharedValueCache[H]) Update(added []SharedValueCacheAdded[H], accesse
 }
 
 func (snc *SharedValueCache[H]) Reset() {
-	snc.cache.Clear()
+	snc.lru.Purge()
 }
 
 // / The inner of [`SharedTrieCache`].
-// pub(super) struct SharedTrieCacheInner<H: Hasher> {
 type SharedTrieCacheInner[H runtime.Hash] struct {
-	// node_cache: SharedNodeCache<H::Out>,
-	nodeCache *SharedNodeCache[H]
-	// value_cache: SharedValueCache<H::Out>,
+	nodeCache  *SharedNodeCache[H]
 	valueCache *SharedValueCache[H]
 }
 
@@ -244,9 +241,7 @@ type SharedTrieCacheInner[H runtime.Hash] struct {
 // / bounds given via the [`CacheSize`] at startup.
 // /
 // / The instance of this object can be shared between multiple threads.
-// pub struct SharedTrieCache<H: Hasher> {
 type SharedTrieCache[H runtime.Hash] struct {
-	// inner: Arc<RwLock<SharedTrieCacheInner<H>>>,
 	inner SharedTrieCacheInner[H]
 	mtx   sync.RWMutex
 }
@@ -269,17 +264,23 @@ func NewSharedTrieCache[H runtime.Hash](size uint) SharedTrieCache[H] {
 
 // / Create a new [`LocalTrieCache`](super::LocalTrieCache) instance from this shared cache.
 func (stc *SharedTrieCache[H]) LocalTrieCache() LocalTrieCache[H] {
-	nodeCache, err := otter.MustBuilder[H, NodeCached[H]](int(LocalNodeCacheMaxSize)).
-		Cost(func(hash H, node NodeCached[H]) uint32 {
-			return uint32(node.ByteSize())
-		}).
-		Build()
+	// nodeCache, err := otter.MustBuilder[H, NodeCached[H]](int(LocalNodeCacheMaxSize)).
+	// 	Cost(func(hash H, node NodeCached[H]) uint32 {
+	// 		return uint32(node.ByteSize())
+	// 	}).
+	// 	Build()
+	h := hasher[H]{maphash.NewHasher[H]()}
+	nodeCache, err := costlru.New(LocalNodeCacheMaxSize, h.Hash, func(hash H, node NodeCached[H]) uint32 {
+		return uint32(node.ByteSize())
+	})
 	if err != nil {
 		panic(err)
 	}
 
-	valueCache, err := otter.MustBuilder[ValueCacheKeyHash[H], triedb.CachedValue[H]](int(LocalValueCacheMaxSize)).
-		Cost(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) uint32 {
+	valueCache, err := costlru.New(
+		LocalValueCacheMaxSize,
+		hasher[ValueCacheKeyHash[H]]{maphash.NewHasher[ValueCacheKeyHash[H]]()}.Hash,
+		func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) uint32 {
 			keyCost := uint32(len(key.StorageKey))
 			switch value := value.(type) {
 			case triedb.NonExistingCachedValue[H]:
@@ -291,14 +292,32 @@ func (stc *SharedTrieCache[H]) LocalTrieCache() LocalTrieCache[H] {
 			default:
 				panic("unreachable")
 			}
-		}).
-		Build()
+		})
+	// valueCache, err := otter.MustBuilder[ValueCacheKeyHash[H], triedb.CachedValue[H]](int(LocalValueCacheMaxSize)).
+	// 	Cost(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) uint32 {
+	// 		keyCost := uint32(len(key.StorageKey))
+	// 		switch value := value.(type) {
+	// 		case triedb.NonExistingCachedValue[H]:
+	// 			return keyCost + 1
+	// 		case triedb.ExistingHashCachedValue[H]:
+	// 			return keyCost + uint32(value.Hash.Length())
+	// 		case triedb.ExistingCachedValue[H]:
+	// 			return keyCost + uint32(value.Hash.Length()+len(value.Data))
+	// 		default:
+	// 			panic("unreachable")
+	// 		}
+	// 	}).
+	// 	Build()
 	if err != nil {
 		panic(err)
 	}
 
-	sharedValueCacheAccess, err := otter.MustBuilder[ValueCacheKeyHash[H], any](int(SharedValueCacheMaxPromotedKeys)).
-		Build()
+	// sharedValueCacheAccess, err := otter.MustBuilder[ValueCacheKeyHash[H], any](int(SharedValueCacheMaxPromotedKeys)).
+	// 	Build()
+	sharedValueCacheAccess, err := freelru.New[ValueCacheKeyHash[H], any](
+		uint32(SharedValueCacheMaxPromotedKeys),
+		hasher[ValueCacheKeyHash[H]]{maphash.NewHasher[ValueCacheKeyHash[H]]()}.Hash,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -327,7 +346,7 @@ func (stc *SharedTrieCache[H]) Unlock() {
 func (stc *SharedTrieCache[H]) PeekNode(key H) triedb.CachedNode[H] {
 	stc.mtx.RLock()
 	defer stc.mtx.RUnlock()
-	node, ok := stc.inner.nodeCache.cache.Extension().GetQuietly(key)
+	node, ok := stc.inner.nodeCache.lru.Peek(key)
 	if ok {
 		return node
 	}
@@ -342,7 +361,7 @@ func (stc *SharedTrieCache[H]) PeekNode(key H) triedb.CachedNode[H] {
 func (stc *SharedTrieCache[H]) PeekValueByHash(hash ValueCacheKeyHash[H], storageRoot H, storageKey []byte) triedb.CachedValue[H] {
 	stc.mtx.RLock()
 	defer stc.mtx.RUnlock()
-	val, ok := stc.inner.valueCache.cache.Extension().GetQuietly(hash)
+	val, ok := stc.inner.valueCache.lru.Peek(hash)
 	if ok {
 		return val
 	}
@@ -366,31 +385,5 @@ func (stc *SharedTrieCache[H]) ResetValueCache() {
 func (stc *SharedTrieCache[H]) usedMemorySize() uint {
 	stc.mtx.RLock()
 	defer stc.mtx.RUnlock()
-	var totalCost uint32
-
-	nodeCacheKeys := make([]H, 0)
-	stc.inner.nodeCache.cache.Range(func(key H, value triedb.CachedNode[H]) bool {
-		nodeCacheKeys = append(nodeCacheKeys, key)
-		return true
-	})
-	for _, key := range nodeCacheKeys {
-		entry, ok := stc.inner.nodeCache.cache.Extension().GetEntryQuietly(key)
-		if !ok {
-			panic("huh?")
-		}
-		totalCost += entry.Cost()
-	}
-	valueCacheKeys := make([]ValueCacheKeyHash[H], 0)
-	stc.inner.valueCache.cache.Range(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) bool {
-		valueCacheKeys = append(valueCacheKeys, key)
-		return true
-	})
-	for _, key := range valueCacheKeys {
-		entry, ok := stc.inner.valueCache.cache.Extension().GetEntryQuietly(key)
-		if !ok {
-			panic("huh?")
-		}
-		totalCost += entry.Cost()
-	}
-	return uint(totalCost)
+	return stc.inner.nodeCache.lru.Cost() + stc.inner.valueCache.lru.Cost()
 }

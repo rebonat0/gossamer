@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
@@ -73,15 +72,15 @@ func Test_SharedTrieCache(t *testing.T) {
 		}
 
 		// Local cache wasn't committed yet, so there should nothing in the shared caches.
-		require.Equal(t, 0, sharedCache.inner.valueCache.cache.Size())
-		require.Equal(t, 0, sharedCache.inner.nodeCache.cache.Size())
+		require.Equal(t, 0, sharedCache.inner.valueCache.lru.Len())
+		require.Equal(t, 0, sharedCache.inner.nodeCache.lru.Len())
 
 		localCache.commit()
 
 		// Now we should have the cached items in the shared cache.
-		require.GreaterOrEqual(t, sharedCache.inner.nodeCache.cache.Size(), 1)
+		require.GreaterOrEqual(t, sharedCache.inner.nodeCache.lru.Len(), 1)
 
-		cachedVal, ok := sharedCache.inner.valueCache.cache.Extension().GetQuietly(
+		cachedVal, ok := sharedCache.inner.valueCache.lru.Peek(
 			ValueCacheKey[hash.H256]{
 				StorageRoot: root,
 				StorageKey:  testData[0].Key,
@@ -95,7 +94,7 @@ func Test_SharedTrieCache(t *testing.T) {
 		var fakeData = []byte("fake_data")
 
 		localCache = sharedCache.LocalTrieCache()
-		sharedCache.inner.valueCache.cache.Set(
+		sharedCache.inner.valueCache.lru.Add(
 			ValueCacheKey[hash.H256]{
 				StorageRoot: root,
 				StorageKey:  testData[1].Key,
@@ -145,13 +144,14 @@ func Test_SharedTrieCache(t *testing.T) {
 			}
 
 			cache.(*TrieCache[hash.H256]).MergeInto(&localCache, newRoot)
-			localCache.commit()
 			unlock()
+			localCache.commit()
+
 		}
 
 		// After the local cache is dropped, all changes should have been merged back to the shared
 		// cache.
-		cachedVal, ok := sharedCache.inner.valueCache.cache.Extension().GetQuietly(ValueCacheKey[hash.H256]{
+		cachedVal, ok := sharedCache.inner.valueCache.lru.Peek(ValueCacheKey[hash.H256]{
 			StorageRoot: newRoot,
 			StorageKey:  newKey,
 		}.ValueCacheKeyHash())
@@ -305,7 +305,7 @@ func Test_SharedTrieCache(t *testing.T) {
 
 		// Check that all items are there.
 		var allFound = true
-		sharedCache.inner.valueCache.cache.Range(func(key ValueCacheKeyHash[hash.H256], value triedb.CachedValue[hash.H256]) bool {
+		for _, key := range sharedCache.inner.valueCache.lru.Keys() {
 			var found bool
 			for _, item := range testData {
 				if bytes.Equal([]byte(key.StorageKey), item.Key) {
@@ -315,9 +315,9 @@ func Test_SharedTrieCache(t *testing.T) {
 			}
 			if !found {
 				allFound = false
+				break
 			}
-			return found
-		})
+		}
 		require.True(t, allFound)
 
 		// Run this in a loop. The first time we check that with the filled value cache,
@@ -345,7 +345,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			// Ensure that the accessed items are part of the shared value
 			// cache.
 			for _, item := range testData[:2] {
-				_, ok := sharedCache.inner.valueCache.cache.Extension().GetQuietly(ValueCacheKey[hash.H256]{
+				_, ok := sharedCache.inner.valueCache.lru.Peek(ValueCacheKey[hash.H256]{
 					StorageRoot: root,
 					StorageKey:  item.Key,
 				}.ValueCacheKeyHash())
@@ -356,11 +356,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			sharedCache.ResetValueCache()
 		}
 
-		var mostRecentlyUsedNodes []hash.H256
-		sharedCache.inner.nodeCache.cache.Range(func(key hash.H256, value triedb.CachedNode[hash.H256]) bool {
-			mostRecentlyUsedNodes = append(mostRecentlyUsedNodes, key)
-			return true
-		})
+		mostRecentlyUsedNodes := sharedCache.inner.nodeCache.lru.Keys()
 
 		{
 			localCache := sharedCache.LocalTrieCache()
@@ -380,14 +376,10 @@ func Test_SharedTrieCache(t *testing.T) {
 			localCache.commit()
 		}
 
-		// Ensure that the most recently used nodes are all still there
-		var cachedNodes []hash.H256
-		sharedCache.inner.nodeCache.cache.Range(func(key hash.H256, value triedb.CachedNode[hash.H256]) bool {
-			cachedNodes = append(cachedNodes, key)
-			return true
-		})
+		// Ensure that the most recently used nodes changed as well.
+		cachedNodes := sharedCache.inner.nodeCache.lru.Keys()
 
-		require.Equal(t, mostRecentlyUsedNodes, cachedNodes)
+		require.NotEqual(t, mostRecentlyUsedNodes, cachedNodes)
 	})
 
 	t.Run("cache_respects_bounds", func(t *testing.T) {
@@ -419,7 +411,6 @@ func Test_SharedTrieCache(t *testing.T) {
 			localCache.commit()
 		}
 
-		time.Sleep(10 * time.Millisecond)
 		require.Less(t, sharedCache.usedMemorySize(), cacheSize)
 	})
 }

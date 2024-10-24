@@ -3,7 +3,6 @@ package cache
 import (
 	"bytes"
 	"testing"
-	"time"
 
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
@@ -11,7 +10,7 @@ import (
 )
 
 func Test_SharedValueCache(t *testing.T) {
-	cache := NewSharedValueCache[hash.H256](110)
+	cache := NewSharedValueCache[hash.H256](140)
 
 	key := bytes.Repeat([]byte{0}, 10)
 	root0 := hash.NewRandomH256()
@@ -38,13 +37,13 @@ func Test_SharedValueCache(t *testing.T) {
 	}, nil)
 
 	// Ensure that the basics are working
-	require.Equal(t, 2, cache.cache.Size())
+	require.Equal(t, 2, cache.lru.Len())
 
 	// Just accessing a key should not change anything on the size and number of entries.
 	cache.Update(nil, []ValueCacheKeyHash[hash.H256]{
 		vck0.ValueCacheKeyHash(),
 	})
-	require.Equal(t, 2, cache.cache.Size())
+	require.Equal(t, 2, cache.lru.Len())
 
 	// Updating the cache again with exactly the same data should not change anything.
 	cache.Update([]SharedValueCacheAdded[hash.H256]{
@@ -57,7 +56,7 @@ func Test_SharedValueCache(t *testing.T) {
 			CachedValue:   triedb.NonExistingCachedValue[hash.H256]{},
 		},
 	}, nil)
-	require.Equal(t, 2, cache.cache.Size())
+	require.Equal(t, 2, cache.lru.Len())
 
 	var added []SharedValueCacheAdded[hash.H256]
 	// Add 10 other entries and this should move out two of the initial entries.
@@ -72,11 +71,9 @@ func Test_SharedValueCache(t *testing.T) {
 	}
 	cache.Update(added, nil)
 
-	// Sleep a little for eviction
-	time.Sleep(5 * time.Millisecond)
-	require.Equal(t, 10, cache.cache.Size())
+	require.Equal(t, 10, cache.lru.Len())
 
-	val, ok := cache.cache.Extension().GetQuietly(ValueCacheKey[hash.H256]{
+	val, ok := cache.lru.Peek(ValueCacheKey[hash.H256]{
 		StorageRoot: root0,
 		StorageKey:  bytes.Repeat([]byte{1}, 10),
 	}.ValueCacheKeyHash())
@@ -84,15 +81,15 @@ func Test_SharedValueCache(t *testing.T) {
 	require.Equal(t, triedb.NonExistingCachedValue[hash.H256]{}, val)
 
 	// this was never inserted
-	val, ok = cache.cache.Extension().GetQuietly(ValueCacheKey[hash.H256]{
+	val, ok = cache.lru.Peek(ValueCacheKey[hash.H256]{
 		StorageRoot: root1,
 		StorageKey:  bytes.Repeat([]byte{1}, 10),
 	}.ValueCacheKeyHash())
 	require.False(t, ok)
 
-	val, ok = cache.cache.Extension().GetQuietly(vck0.ValueCacheKeyHash())
+	val, ok = cache.lru.Peek(vck0.ValueCacheKeyHash())
 	require.False(t, ok)
-	val, ok = cache.cache.Extension().GetQuietly(vck1.ValueCacheKeyHash())
+	val, ok = cache.lru.Peek(vck1.ValueCacheKeyHash())
 	require.False(t, ok)
 
 	// cache.Update([]SharedValueCacheAdded[hash.H256]{

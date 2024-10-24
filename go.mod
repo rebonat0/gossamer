@@ -12,6 +12,8 @@ require (
 	github.com/dgraph-io/badger/v4 v4.3.1
 	github.com/dgraph-io/ristretto v1.0.0
 	github.com/disiqueira/gotree v1.0.0
+	github.com/dolthub/maphash v0.1.0
+	github.com/elastic/go-freelru v0.14.0
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/fatih/color v1.17.0
 	github.com/gammazero/deque v0.2.1
@@ -31,6 +33,7 @@ require (
 	github.com/li1234yun/gods-generic v0.0.0-20230420031820-5b9f08f4846b
 	github.com/libp2p/go-libp2p v0.36.2
 	github.com/libp2p/go-libp2p-kad-dht v0.27.0
+	github.com/maypok86/otter v1.2.3
 	github.com/minio/sha256-simd v1.0.1
 	github.com/multiformats/go-multiaddr v0.13.0
 	github.com/nanobox-io/golang-scribble v0.0.0-20190309225732-aa3e7c118975
@@ -73,7 +76,6 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elastic/gosigar v0.14.3 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
@@ -135,7 +137,6 @@ require (
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/maypok86/otter v1.2.3 // indirect
 	github.com/miekg/dns v1.1.61 // indirect
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
@@ -202,6 +203,7 @@ require (
 	github.com/vedhavyas/go-subkey v1.0.4-0.20220708014838-349cf3021f51 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.3 // indirect
+	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel v1.27.0 // indirect
 	go.opentelemetry.io/otel/metric v1.27.0 // indirect
@@ -229,3 +231,5 @@ toolchain go1.22.5
 replace github.com/tetratelabs/wazero => github.com/ChainSafe/wazero v0.0.0-20240319130522-78b21a59bd5f
 
 replace github.com/centrifuge/go-substrate-rpc-client/v4 => github.com/timwu20/go-substrate-rpc-client/v4 v4.0.0-20231110032757-3d8e441b7303
+
+replace github.com/elastic/go-freelru => github.com/timwu20/go-freelru v0.0.0-20241023201517-deb64adeae4c

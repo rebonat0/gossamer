@@ -3,9 +3,10 @@ package cache
 import (
 	"sync"
 
+	costlru "github.com/ChainSafe/gossamer/internal/cost-lru"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
-	"github.com/maypok86/otter"
+	"github.com/elastic/go-freelru"
 )
 
 // / The maximum number of existing keys in the shared cache that a single local cache
@@ -13,7 +14,6 @@ import (
 // /
 // / If we have a big shared cache and the local cache hits all of those keys we don't
 // / want to spend forever bumping all of them.
-// const SHARED_NODE_CACHE_MAX_PROMOTED_KEYS: u32 = 1792;
 const SharedNodeCacheMaxPromotedKeys = uint(1792)
 
 // / Same as [`SHARED_NODE_CACHE_MAX_PROMOTED_KEYS`].
@@ -24,11 +24,9 @@ const SharedValueCacheMaxPromotedKeys = uint(1792)
 // /
 // / We don't want a single local cache instance to have the ability to replace
 // / everything in the shared cache.
-// const SHARED_NODE_CACHE_MAX_REPLACE_PERCENT: usize = 33;
 const SharedNodeCacheMaxReplacePercent = uint(33)
 
 // / Same as [`SHARED_NODE_CACHE_MAX_REPLACE_PERCENT`].
-// const SHARED_VALUE_CACHE_MAX_REPLACE_PERCENT: usize = 33;
 const SharedValueCacheMaxReplacePercent = uint(33)
 
 // / The maximum size of the memory allocated on the heap by the local cache, in bytes.
@@ -36,30 +34,21 @@ const SharedValueCacheMaxReplacePercent = uint(33)
 // / The size of the node cache should always be bigger than the value cache. The value
 // / cache is only holding weak references to the actual values found in the nodes and
 // / we account for the size of the node as part of the node cache.
-// const LOCAL_NODE_CACHE_MAX_HEAP_SIZE: usize = 8 * 1024 * 1024;
 const LocalNodeCacheMaxSize = uint(8 * 1024 * 1024)
 
 // / Same as [`LOCAL_NODE_CACHE_MAX_HEAP_SIZE`].
-// const LOCAL_VALUE_CACHE_MAX_HEAP_SIZE: usize = 2 * 1024 * 1024;
 const LocalValueCacheMaxSize = uint(2 * 1024 * 1024)
 
 // / An internal struct to store the cached trie nodes.
-// pub(crate) struct NodeCached<H> {
 type NodeCached[H runtime.Hash] struct {
-	// 	/// The cached node.
-	// 	pub node: NodeOwned<H>,
+	/// The cached node.
 	Node triedb.CachedNode[H]
-	// /// Whether this node was fetched from the shared cache or not.
-	// pub is_from_shared_cache: bool,
+	/// Whether this node was fetched from the shared cache or not.
+
 	FromSharedCache bool
 }
 
-//	impl<H> NodeCached<H> {
-//		/// Returns the number of bytes allocated on the heap by this node.
-//		fn heap_size(&self) -> usize {
-//			self.node.size_in_bytes() - std::mem::size_of::<NodeOwned<H>>()
-//		}
-//	}
+// / Returns the number of bytes allocated on the heap by this node.
 func (nc NodeCached[H]) ByteSize() uint {
 	return nc.Node.ByteSize()
 }
@@ -74,32 +63,30 @@ func (nc NodeCached[H]) ByteSize() uint {
 // / When using [`Self::as_trie_db_cache`] or [`Self::as_trie_db_mut_cache`], it will lock Mutexes.
 // / So, it is important that these methods are not called multiple times, because they otherwise
 // / deadlock.
-// pub struct LocalTrieCache<H: Hasher> {
 type LocalTrieCache[H runtime.Hash] struct {
 	/// The shared trie cache that created this instance.
-	// 	shared: SharedTrieCache<H>,
 	shared *SharedTrieCache[H]
 
 	/// The local cache for the trie nodes.
-	// 	node_cache: Mutex<NodeCacheMap<H::Out>>,
-	nodeCache    otter.Cache[H, NodeCached[H]]
+	// nodeCache    otter.Cache[H, NodeCached[H]]
+	nodeCache    *costlru.LRU[H, NodeCached[H]]
 	nodeCacheMtx sync.Mutex
 
 	/// The local cache for the values.
-	// 	value_cache: Mutex<ValueCacheMap<H::Out>>,
-	valueCache    otter.Cache[ValueCacheKeyHash[H], triedb.CachedValue[H]]
+	// valueCache    otter.Cache[ValueCacheKeyHash[H], triedb.CachedValue[H]]
+	valueCache    *costlru.LRU[ValueCacheKeyHash[H], triedb.CachedValue[H]]
 	valueCacheMtx sync.Mutex
 
-	// 	/// Keeps track of all values accessed in the shared cache.
-	// 	///
-	// 	/// This will be used to ensure that these nodes are brought to the front of the lru when this
-	// 	/// local instance is merged back to the shared cache. This can actually lead to collision when
-	// 	/// two [`ValueCacheKey`]s with different storage roots and keys map to the same hash. However,
-	// 	/// as we only use this set to update the lru position it is fine, even if we bring the wrong
-	// 	/// value to the top. The important part is that we always get the correct value from the value
-	// 	/// cache for a given key.
-	// 	shared_value_cache_access: Mutex<ValueAccessSet>,
-	sharedValueCacheAccess    otter.Cache[ValueCacheKeyHash[H], any]
+	/// Keeps track of all values accessed in the shared cache.
+	///
+	/// This will be used to ensure that these nodes are brought to the front of the lru when this
+	/// local instance is merged back to the shared cache. This can actually lead to collision when
+	/// two [`ValueCacheKey`]s with different storage roots and keys map to the same hash. However,
+	/// as we only use this set to update the lru position it is fine, even if we bring the wrong
+	/// value to the top. The important part is that we always get the correct value from the value
+	/// cache for a given key.
+	// sharedValueCacheAccess    otter.Cache[ValueCacheKeyHash[H], any]
+	sharedValueCacheAccess    *freelru.LRU[ValueCacheKeyHash[H], any]
 	sharedValueCacheAccessMtx sync.Mutex
 
 	stats trieHitStats
@@ -124,33 +111,57 @@ func (ltc *LocalTrieCache[H]) commit() {
 	sharedInner := &ltc.shared.inner
 
 	updateItems := make([]UpdateItem[H], 0)
-	ltc.nodeCache.Range(func(hash H, node NodeCached[H]) bool {
+	// ltc.nodeCache.Range(func(hash H, node NodeCached[H]) bool {
+	// 	updateItems = append(updateItems, UpdateItem[H]{
+	// 		Hash:       hash,
+	// 		NodeCached: node,
+	// 	})
+	// 	return true
+	// })
+	ltc.nodeCacheMtx.Lock()
+	for _, hash := range ltc.nodeCache.Keys() {
+		node, ok := ltc.nodeCache.Peek(hash)
+		if !ok {
+			panic("node should be found")
+		}
 		updateItems = append(updateItems, UpdateItem[H]{
 			Hash:       hash,
 			NodeCached: node,
 		})
-		return true
-	})
-	ltc.nodeCache.Clear()
+	}
+	ltc.nodeCache.Purge()
+	ltc.nodeCacheMtx.Unlock()
 	sharedInner.nodeCache.Update(updateItems)
 
 	added := make([]SharedValueCacheAdded[H], 0)
-	ltc.valueCache.Range(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) bool {
+	// ltc.valueCache.Range(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) bool {
+	// 	added = append(added, SharedValueCacheAdded[H]{
+	// 		ValueCacheKey: key.ValueCacheKey(),
+	// 		CachedValue:   value,
+	// 	})
+	// 	return true
+	// })
+	ltc.valueCacheMtx.Lock()
+	for _, key := range ltc.valueCache.Keys() {
+		value, ok := ltc.valueCache.Get(key)
+		if !ok {
+			panic("value should be found")
+		}
 		added = append(added, SharedValueCacheAdded[H]{
 			ValueCacheKey: key.ValueCacheKey(),
 			CachedValue:   value,
 		})
-		return true
-	})
-	ltc.valueCache.Clear()
+	}
+	ltc.valueCache.Purge()
+	ltc.valueCacheMtx.Unlock()
 
-	accessed := make([]ValueCacheKeyHash[H], 0)
 	ltc.sharedValueCacheAccessMtx.Lock()
-	ltc.sharedValueCacheAccess.Range(func(key ValueCacheKeyHash[H], value any) bool {
-		accessed = append(accessed, key)
-		return true
-	})
-	ltc.sharedValueCacheAccess.Clear()
+	// ltc.sharedValueCacheAccess.Range(func(key ValueCacheKeyHash[H], value any) bool {
+	// 	accessed = append(accessed, key)
+	// 	return true
+	// })
+	accessed := ltc.sharedValueCacheAccess.Keys()
+	ltc.sharedValueCacheAccess.Purge()
 	ltc.sharedValueCacheAccessMtx.Unlock()
 
 	sharedInner.valueCache.Update(added, accessed)
@@ -159,15 +170,14 @@ func (ltc *LocalTrieCache[H]) commit() {
 // / Return self as a [`TrieDB`](trie_db::TrieDB) compatible cache.
 // /
 // / The given `storage_root` needs to be the storage root of the trie this cache is used for.
-// pub fn as_trie_db_cache(&self, storage_root: H::Out) -> TrieCache<'_, H> {
 func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache triedb.TrieCache[H], unlock func()) {
 	ltc.valueCacheMtx.Lock()
 	ltc.sharedValueCacheAccessMtx.Lock()
 
 	valueCache := forStorageRootValueCache[H]{
 		storageRoot:            storageRoot,
-		localValueCache:        &ltc.valueCache,
-		sharedValueCacheAccess: &ltc.sharedValueCacheAccess,
+		localValueCache:        ltc.valueCache,
+		sharedValueCacheAccess: ltc.sharedValueCacheAccess,
 	}
 
 	ltc.nodeCacheMtx.Lock()
@@ -179,26 +189,11 @@ func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache triedb.TrieCache[H
 	}
 	return &TrieCache[H]{
 		sharedCache: ltc.shared,
-		localCache:  &ltc.nodeCache,
+		localCache:  ltc.nodeCache,
 		valueCache:  &valueCache,
 		stats:       ltc.stats,
 	}, unlock
 }
-
-// 	let value_cache = ValueCache::ForStorageRoot {
-// 		storage_root,
-// 		local_value_cache: self.value_cache.lock(),
-// 		shared_value_cache_access: self.shared_value_cache_access.lock(),
-// 		buffered_value: None,
-// 	};
-
-// 	TrieCache {
-// 		shared_cache: self.shared.clone(),
-// 		local_cache: self.node_cache.lock(),
-// 		value_cache,
-// 		stats: &self.stats,
-// 	}
-// }
 
 // / Return self as [`TrieDBMut`](trie_db::TrieDBMut) compatible cache.
 // /
@@ -207,25 +202,24 @@ func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache triedb.TrieCache[H
 // / cache instance. If the function is not called, cached data is just thrown away and not
 // / propagated to the shared cache. So, accessing these new items will be slower, but nothing
 // / would break because of this.
-// pub fn as_trie_db_mut_cache(&self) -> TrieCache<'_, H> {
 func (ltc *LocalTrieCache[H]) TrieCacheMut() (cache triedb.TrieCache[H], unlock func()) {
 	ltc.nodeCacheMtx.Lock()
 	return &TrieCache[H]{
 		sharedCache: ltc.shared,
-		localCache:  &ltc.nodeCache,
+		localCache:  ltc.nodeCache,
 		valueCache:  &freshValueCache[H]{},
 		stats:       ltc.stats,
 	}, ltc.nodeCacheMtx.Unlock
 }
 
-/// A struct to gather hit/miss stats to aid in debugging the performance of the cache.
-// struct HitStats {
-// 	shared_hits: AtomicU64,
-// 	shared_fetch_attempts: AtomicU64,
-// 	local_hits: AtomicU64,
-// 	local_fetch_attempts: AtomicU64,
-// }
-
+// / A struct to gather hit/miss stats to aid in debugging the performance of the cache.
+//
+//	struct HitStats {
+//		shared_hits: AtomicU64,
+//		shared_fetch_attempts: AtomicU64,
+//		local_hits: AtomicU64,
+//		local_fetch_attempts: AtomicU64,
+//	}
 type hitStats struct{}
 
 // / A struct to gather hit/miss stats for the node cache and the value cache.
@@ -262,8 +256,8 @@ func (fvc *freshValueCache[H]) insert(key []byte, value triedb.CachedValue[H]) {
 
 // / The value cache is already bound to a specific storage root.
 type forStorageRootValueCache[H runtime.Hash] struct {
-	sharedValueCacheAccess *otter.Cache[ValueCacheKeyHash[H], any]
-	localValueCache        *otter.Cache[ValueCacheKeyHash[H], triedb.CachedValue[H]]
+	sharedValueCacheAccess *freelru.LRU[ValueCacheKeyHash[H], any]
+	localValueCache        *costlru.LRU[ValueCacheKeyHash[H], triedb.CachedValue[H]]
 	storageRoot            H
 	// The shared value cache needs to be temporarily locked when reading from it
 	// so we need to clone the value that is returned, but we need to be able to
@@ -284,7 +278,7 @@ func (fsrvc forStorageRootValueCache[H]) get(key []byte, sharedCache *SharedTrie
 		StorageKey:  key,
 		StorageRoot: fsrvc.storageRoot,
 	}
-	val, ok := fsrvc.localValueCache.Extension().GetQuietly(vck.ValueCacheKeyHash())
+	val, ok := fsrvc.localValueCache.Peek(vck.ValueCacheKeyHash())
 	if ok {
 		// stats.local_hits.fetch_add(1, Ordering::Relaxed);
 		return val
@@ -294,7 +288,7 @@ func (fsrvc forStorageRootValueCache[H]) get(key []byte, sharedCache *SharedTrie
 	sharedVal := sharedCache.PeekValueByHash(vck.ValueCacheKeyHash(), fsrvc.storageRoot, key)
 	if sharedVal != nil {
 		// stats.shared_hits.fetch_add(1, Ordering::Relaxed);
-		fsrvc.sharedValueCacheAccess.Set(vck.ValueCacheKeyHash(), any(nil))
+		fsrvc.sharedValueCacheAccess.Add(vck.ValueCacheKeyHash(), any(nil))
 		fsrvc.bufferedValue = sharedVal
 		return fsrvc.bufferedValue
 	}
@@ -306,7 +300,7 @@ func (fsrvc forStorageRootValueCache[H]) insert(key []byte, value triedb.CachedV
 		StorageKey:  key,
 		StorageRoot: fsrvc.storageRoot,
 	}
-	fsrvc.localValueCache.Set(vck.ValueCacheKeyHash(), value)
+	fsrvc.localValueCache.Add(vck.ValueCacheKeyHash(), value)
 }
 
 // / The actual [`TrieCache`](trie_db::TrieCache) implementation.
@@ -314,16 +308,13 @@ func (fsrvc forStorageRootValueCache[H]) insert(key []byte, value triedb.CachedV
 // / If this instance was created for using it with a [`TrieDBMut`](trie_db::TrieDBMut), it needs to
 // / be merged back into the [`LocalTrieCache`] with [`Self::merge_into`] after all operations are
 // / done.
-// pub struct TrieCache<'a, H: Hasher> {
 type TrieCache[H runtime.Hash] struct {
-	// shared_cache: SharedTrieCache<H>,
 	sharedCache *SharedTrieCache[H]
 	// local_cache: MutexGuard<'a, NodeCacheMap<H::Out>>,
-	localCache *otter.Cache[H, NodeCached[H]]
-	// value_cache: ValueCache<'a, H>,
+	// localCache *otter.Cache[H, NodeCached[H]]
+	localCache *costlru.LRU[H, NodeCached[H]]
 	valueCache valueCache[H]
-	// stats: &'a TrieHitStats,
-	stats trieHitStats
+	stats      trieHitStats
 }
 
 // / Merge this cache into the given [`LocalTrieCache`].
@@ -347,7 +338,7 @@ func (tc *TrieCache[H]) MergeInto(local *LocalTrieCache[H], storageRoot H) {
 		}
 		for k, v := range *cache {
 			vck.StorageKey = []byte(k)
-			ok := local.valueCache.Set(vck.ValueCacheKeyHash(), v)
+			ok, _ := local.valueCache.Add(vck.ValueCacheKeyHash(), v)
 			if !ok {
 				panic("huh?")
 			}
@@ -379,14 +370,13 @@ func (tc *TrieCache[H]) GetOrInsertNode(hash H, fetchNode func() (triedb.CachedN
 			fetched, err = fetchNode()
 			if err != nil {
 				// tracing::trace!(target: LOG_TARGET, ?hash, "Serving node from database failed");
-				// 	Err(error)
 				return nil, err
 			} else {
 				// tracing::trace!(target: LOG_TARGET, ?hash, "Serving node from database");
 				node = &NodeCached[H]{Node: fetched, FromSharedCache: false}
 			}
 		}
-		tc.localCache.Set(hash, *node)
+		tc.localCache.Add(hash, *node)
 	} else {
 		node = &local
 	}
@@ -421,7 +411,6 @@ func (tc *TrieCache[H]) GetNode(hash H) triedb.CachedNode[H] {
 			node = &NodeCached[H]{Node: peeked, FromSharedCache: true}
 		} else {
 			// tracing::trace!(target: LOG_TARGET, ?hash, "Serving node from cache failed");
-			// Err(())
 			return nil
 		}
 	} else {
