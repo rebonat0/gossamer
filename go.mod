@@ -33,7 +33,6 @@ require (
 	github.com/li1234yun/gods-generic v0.0.0-20230420031820-5b9f08f4846b
 	github.com/libp2p/go-libp2p v0.36.2
 	github.com/libp2p/go-libp2p-kad-dht v0.27.0
-	github.com/maypok86/otter v1.2.3
 	github.com/minio/sha256-simd v1.0.1
 	github.com/multiformats/go-multiaddr v0.13.0
 	github.com/nanobox-io/golang-scribble v0.0.0-20190309225732-aa3e7c118975
@@ -203,7 +202,6 @@ require (
 	github.com/vedhavyas/go-subkey v1.0.4-0.20220708014838-349cf3021f51 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.3 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel v1.27.0 // indirect
 	go.opentelemetry.io/otel/metric v1.27.0 // indirect

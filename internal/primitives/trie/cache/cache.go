@@ -44,7 +44,6 @@ type NodeCached[H runtime.Hash] struct {
 	/// The cached node.
 	Node triedb.CachedNode[H]
 	/// Whether this node was fetched from the shared cache or not.
-
 	FromSharedCache bool
 }
 
@@ -68,12 +67,10 @@ type LocalTrieCache[H runtime.Hash] struct {
 	shared *SharedTrieCache[H]
 
 	/// The local cache for the trie nodes.
-	// nodeCache    otter.Cache[H, NodeCached[H]]
 	nodeCache    *costlru.LRU[H, NodeCached[H]]
 	nodeCacheMtx sync.Mutex
 
 	/// The local cache for the values.
-	// valueCache    otter.Cache[ValueCacheKeyHash[H], triedb.CachedValue[H]]
 	valueCache    *costlru.LRU[ValueCacheKeyHash[H], triedb.CachedValue[H]]
 	valueCacheMtx sync.Mutex
 
@@ -85,7 +82,6 @@ type LocalTrieCache[H runtime.Hash] struct {
 	/// as we only use this set to update the lru position it is fine, even if we bring the wrong
 	/// value to the top. The important part is that we always get the correct value from the value
 	/// cache for a given key.
-	// sharedValueCacheAccess    otter.Cache[ValueCacheKeyHash[H], any]
 	sharedValueCacheAccess    *freelru.LRU[ValueCacheKeyHash[H], any]
 	sharedValueCacheAccessMtx sync.Mutex
 
@@ -111,13 +107,6 @@ func (ltc *LocalTrieCache[H]) commit() {
 	sharedInner := &ltc.shared.inner
 
 	updateItems := make([]UpdateItem[H], 0)
-	// ltc.nodeCache.Range(func(hash H, node NodeCached[H]) bool {
-	// 	updateItems = append(updateItems, UpdateItem[H]{
-	// 		Hash:       hash,
-	// 		NodeCached: node,
-	// 	})
-	// 	return true
-	// })
 	ltc.nodeCacheMtx.Lock()
 	for _, hash := range ltc.nodeCache.Keys() {
 		node, ok := ltc.nodeCache.Peek(hash)
@@ -134,13 +123,6 @@ func (ltc *LocalTrieCache[H]) commit() {
 	sharedInner.nodeCache.Update(updateItems)
 
 	added := make([]SharedValueCacheAdded[H], 0)
-	// ltc.valueCache.Range(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) bool {
-	// 	added = append(added, SharedValueCacheAdded[H]{
-	// 		ValueCacheKey: key.ValueCacheKey(),
-	// 		CachedValue:   value,
-	// 	})
-	// 	return true
-	// })
 	ltc.valueCacheMtx.Lock()
 	for _, key := range ltc.valueCache.Keys() {
 		value, ok := ltc.valueCache.Get(key)
@@ -156,10 +138,6 @@ func (ltc *LocalTrieCache[H]) commit() {
 	ltc.valueCacheMtx.Unlock()
 
 	ltc.sharedValueCacheAccessMtx.Lock()
-	// ltc.sharedValueCacheAccess.Range(func(key ValueCacheKeyHash[H], value any) bool {
-	// 	accessed = append(accessed, key)
-	// 	return true
-	// })
 	accessed := ltc.sharedValueCacheAccess.Keys()
 	ltc.sharedValueCacheAccess.Purge()
 	ltc.sharedValueCacheAccessMtx.Unlock()
@@ -262,7 +240,6 @@ type forStorageRootValueCache[H runtime.Hash] struct {
 	// The shared value cache needs to be temporarily locked when reading from it
 	// so we need to clone the value that is returned, but we need to be able to
 	// return a reference to the value, so we just buffer it here.
-	// buffered_value: Option<CachedValue<H::Out>>,
 	bufferedValue triedb.CachedValue[H]
 }
 
@@ -310,11 +287,9 @@ func (fsrvc forStorageRootValueCache[H]) insert(key []byte, value triedb.CachedV
 // / done.
 type TrieCache[H runtime.Hash] struct {
 	sharedCache *SharedTrieCache[H]
-	// local_cache: MutexGuard<'a, NodeCacheMap<H::Out>>,
-	// localCache *otter.Cache[H, NodeCached[H]]
-	localCache *costlru.LRU[H, NodeCached[H]]
-	valueCache valueCache[H]
-	stats      trieHitStats
+	localCache  *costlru.LRU[H, NodeCached[H]]
+	valueCache  valueCache[H]
+	stats       trieHitStats
 }
 
 // / Merge this cache into the given [`LocalTrieCache`].

@@ -120,7 +120,7 @@ type ValueCacheKey[H runtime.Hash] struct {
 	StorageRoot H
 	/// The key to access the value in the storage.
 	StorageKey []byte
-	// /// The hash that identifies this instance of `storage_root` and `storage_key`.
+	/// The hash that identifies this instance of `storage_root` and `storage_key`.
 	// pub hash: ValueCacheKeyHash,
 }
 
@@ -264,11 +264,6 @@ func NewSharedTrieCache[H runtime.Hash](size uint) SharedTrieCache[H] {
 
 // / Create a new [`LocalTrieCache`](super::LocalTrieCache) instance from this shared cache.
 func (stc *SharedTrieCache[H]) LocalTrieCache() LocalTrieCache[H] {
-	// nodeCache, err := otter.MustBuilder[H, NodeCached[H]](int(LocalNodeCacheMaxSize)).
-	// 	Cost(func(hash H, node NodeCached[H]) uint32 {
-	// 		return uint32(node.ByteSize())
-	// 	}).
-	// 	Build()
 	h := hasher[H]{maphash.NewHasher[H]()}
 	nodeCache, err := costlru.New(LocalNodeCacheMaxSize, h.Hash, func(hash H, node NodeCached[H]) uint32 {
 		return uint32(node.ByteSize())
@@ -293,27 +288,10 @@ func (stc *SharedTrieCache[H]) LocalTrieCache() LocalTrieCache[H] {
 				panic("unreachable")
 			}
 		})
-	// valueCache, err := otter.MustBuilder[ValueCacheKeyHash[H], triedb.CachedValue[H]](int(LocalValueCacheMaxSize)).
-	// 	Cost(func(key ValueCacheKeyHash[H], value triedb.CachedValue[H]) uint32 {
-	// 		keyCost := uint32(len(key.StorageKey))
-	// 		switch value := value.(type) {
-	// 		case triedb.NonExistingCachedValue[H]:
-	// 			return keyCost + 1
-	// 		case triedb.ExistingHashCachedValue[H]:
-	// 			return keyCost + uint32(value.Hash.Length())
-	// 		case triedb.ExistingCachedValue[H]:
-	// 			return keyCost + uint32(value.Hash.Length()+len(value.Data))
-	// 		default:
-	// 			panic("unreachable")
-	// 		}
-	// 	}).
-	// 	Build()
 	if err != nil {
 		panic(err)
 	}
 
-	// sharedValueCacheAccess, err := otter.MustBuilder[ValueCacheKeyHash[H], any](int(SharedValueCacheMaxPromotedKeys)).
-	// 	Build()
 	sharedValueCacheAccess, err := freelru.New[ValueCacheKeyHash[H], any](
 		uint32(SharedValueCacheMaxPromotedKeys),
 		hasher[ValueCacheKeyHash[H]]{maphash.NewHasher[ValueCacheKeyHash[H]]()}.Hash,

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
@@ -10,7 +11,7 @@ import (
 )
 
 func Test_SharedValueCache(t *testing.T) {
-	cache := NewSharedValueCache[hash.H256](140)
+	cache := NewSharedValueCache[hash.H256](110)
 
 	key := bytes.Repeat([]byte{0}, 10)
 	root0 := hash.NewRandomH256()
@@ -37,26 +38,56 @@ func Test_SharedValueCache(t *testing.T) {
 	}, nil)
 
 	// Ensure that the basics are working
+	byStorageKey := slices.CompactFunc(cache.lru.Keys(), func(a, b ValueCacheKeyHash[hash.H256]) bool {
+		return a.StorageKey == b.StorageKey
+	})
+	require.Len(t, byStorageKey, 1)
 	require.Equal(t, 2, cache.lru.Len())
+	keys := cache.lru.Keys()
+	newestKey := keys[len(keys)-1]
+	require.Equal(t, root1, newestKey.StorageRoot)
+	oldestKey := keys[0]
+	require.Equal(t, root0, oldestKey.StorageRoot)
+	require.Equal(t, uint(22), cache.lru.Cost())
 
 	// Just accessing a key should not change anything on the size and number of entries.
 	cache.Update(nil, []ValueCacheKeyHash[hash.H256]{
 		vck0.ValueCacheKeyHash(),
 	})
+	byStorageKey = slices.CompactFunc(cache.lru.Keys(), func(a, b ValueCacheKeyHash[hash.H256]) bool {
+		return a.StorageKey == b.StorageKey
+	})
+	require.Len(t, byStorageKey, 1)
 	require.Equal(t, 2, cache.lru.Len())
+	keys = cache.lru.Keys()
+	newestKey = keys[len(keys)-1]
+	require.Equal(t, root0, newestKey.StorageRoot)
+	oldestKey = keys[0]
+	require.Equal(t, root1, oldestKey.StorageRoot)
+	require.Equal(t, uint(22), cache.lru.Cost())
 
 	// Updating the cache again with exactly the same data should not change anything.
 	cache.Update([]SharedValueCacheAdded[hash.H256]{
 		{
-			ValueCacheKey: vck0,
-			CachedValue:   triedb.NonExistingCachedValue[hash.H256]{},
-		},
-		{
 			ValueCacheKey: vck1,
 			CachedValue:   triedb.NonExistingCachedValue[hash.H256]{},
 		},
+		{
+			ValueCacheKey: vck0,
+			CachedValue:   triedb.NonExistingCachedValue[hash.H256]{},
+		},
 	}, nil)
+	byStorageKey = slices.CompactFunc(cache.lru.Keys(), func(a, b ValueCacheKeyHash[hash.H256]) bool {
+		return a.StorageKey == b.StorageKey
+	})
+	require.Len(t, byStorageKey, 1)
 	require.Equal(t, 2, cache.lru.Len())
+	keys = cache.lru.Keys()
+	newestKey = keys[len(keys)-1]
+	require.Equal(t, root0, newestKey.StorageRoot)
+	oldestKey = keys[0]
+	require.Equal(t, root1, oldestKey.StorageRoot)
+	require.Equal(t, uint(22), cache.lru.Cost())
 
 	var added []SharedValueCacheAdded[hash.H256]
 	// Add 10 other entries and this should move out two of the initial entries.
@@ -71,7 +102,16 @@ func Test_SharedValueCache(t *testing.T) {
 	}
 	cache.Update(added, nil)
 
+	require.Equal(t, uint64(2), cache.lru.Metrics().Removals) // removals instead of evictions
 	require.Equal(t, 10, cache.lru.Len())
+	byStorageKey = slices.CompactFunc(cache.lru.Keys(), func(a, b ValueCacheKeyHash[hash.H256]) bool {
+		return a.StorageKey == b.StorageKey
+	})
+	require.Len(t, byStorageKey, 10)
+	require.False(t, slices.ContainsFunc(cache.lru.Keys(), func(a ValueCacheKeyHash[hash.H256]) bool {
+		return a.StorageKey == string(key)
+	}))
+	require.Equal(t, uint(110), cache.lru.Cost())
 
 	val, ok := cache.lru.Peek(ValueCacheKey[hash.H256]{
 		StorageRoot: root0,
@@ -92,13 +132,18 @@ func Test_SharedValueCache(t *testing.T) {
 	val, ok = cache.lru.Peek(vck1.ValueCacheKeyHash())
 	require.False(t, ok)
 
-	// cache.Update([]SharedValueCacheAdded[hash.H256]{
-	// 	{
-	// 		ValueCacheKey: ValueCacheKey[hash.H256]{
-	// 			StorageRoot: root0,
-	// 			StorageKey:  bytes.Repeat([]byte{10}, 10),
-	// 		},
-	// 		CachedValue: triedb.NonExistingCachedValue[hash.H256]{},
-	// 	},
-	// }, nil)
+	keys = cache.lru.Keys()
+	cache.Update([]SharedValueCacheAdded[hash.H256]{
+		{
+			ValueCacheKey: ValueCacheKey[hash.H256]{
+				StorageRoot: root0,
+				StorageKey:  bytes.Repeat([]byte{10}, 10),
+			},
+			CachedValue: triedb.NonExistingCachedValue[hash.H256]{},
+		},
+	}, nil)
+	keys = cache.lru.Keys()
+	require.False(t, slices.ContainsFunc(cache.lru.Keys(), func(a ValueCacheKeyHash[hash.H256]) bool {
+		return a.StorageKey == string(key)
+	}))
 }

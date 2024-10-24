@@ -15,22 +15,10 @@ import (
 )
 
 var testData = []triedb.TrieItem{
-	{
-		Key:   []byte("key1"),
-		Value: []byte("val1"),
-	},
-	{
-		Key:   []byte("key2"),
-		Value: bytes.Repeat([]byte{2}, 64),
-	},
-	{
-		Key:   []byte("key3"),
-		Value: []byte("val3"),
-	},
-	{
-		Key:   []byte("key4"),
-		Value: bytes.Repeat([]byte{4}, 64),
-	},
+	{Key: []byte("key1"), Value: []byte("val1")},
+	{Key: []byte("key2"), Value: bytes.Repeat([]byte{2}, 64)},
+	{Key: []byte("key3"), Value: []byte("val3")},
+	{Key: []byte("key4"), Value: bytes.Repeat([]byte{4}, 64)},
 }
 
 const cacheSize uint = 1024 * 10
@@ -53,7 +41,6 @@ func createTrie(t *testing.T) (*trie.MemoryDB[hash.H256, runtime.BlakeTwo256], h
 func Test_SharedTrieCache(t *testing.T) {
 	t.Run("cache_works", func(t *testing.T) {
 		db, root := createTrie(t)
-
 		sharedCache := NewSharedTrieCache[hash.H256](cacheSize)
 		localCache := sharedCache.LocalTrieCache()
 
@@ -123,7 +110,6 @@ func Test_SharedTrieCache(t *testing.T) {
 
 	t.Run("TrieCacheMut", func(t *testing.T) {
 		db, root := createTrie(t)
-
 		newKey := []byte("new_key")
 		// Use some long value to not have it inlined
 		newValue := bytes.Repeat([]byte{23}, 64)
@@ -163,7 +149,6 @@ func Test_SharedTrieCache(t *testing.T) {
 
 	t.Run("TrieCache_cache_and_recorder_work_together", func(t *testing.T) {
 		db, root := createTrie(t)
-
 		sharedCache := NewSharedTrieCache[hash.H256](cacheSize)
 
 		for i := 0; i < 5; i++ {
@@ -216,14 +201,8 @@ func Test_SharedTrieCache(t *testing.T) {
 
 	t.Run("TrieCacheMut_cache_and_recorder_work_together", func(t *testing.T) {
 		var dataToAdd = []triedb.TrieItem{
-			{
-				Key:   []byte("key11"),
-				Value: bytes.Repeat([]byte{45}, 78),
-			},
-			{
-				Key:   []byte("key33"),
-				Value: bytes.Repeat([]byte{78}, 89),
-			},
+			{Key: []byte("key11"), Value: bytes.Repeat([]byte{45}, 78)},
+			{Key: []byte("key33"), Value: bytes.Repeat([]byte{78}, 89)},
 		}
 
 		db, root := createTrie(t)
@@ -280,7 +259,6 @@ func Test_SharedTrieCache(t *testing.T) {
 
 	t.Run("cache_lru_works", func(t *testing.T) {
 		db, root := createTrie(t)
-
 		sharedCache := NewSharedTrieCache[hash.H256](cacheSize)
 
 		{
@@ -384,7 +362,6 @@ func Test_SharedTrieCache(t *testing.T) {
 
 	t.Run("cache_respects_bounds", func(t *testing.T) {
 		db, root := createTrie(t)
-
 		sharedCache := NewSharedTrieCache[hash.H256](cacheSize)
 
 		{

@@ -36,6 +36,14 @@ func New[K comparable, V any](maxCost uint, hash freelru.HashKeyCallback[K], cos
 }
 
 func (l *LRU[K, V]) costRemove(key K, value V) (cost uint32, removed bool, canAdd bool) {
+	if l.LRU.Contains(key) {
+		oldVal, ok := l.LRU.Peek(key)
+		if !ok {
+			panic("should be in lru")
+		}
+		cost := l.costFunc(key, oldVal)
+		l.currentCost -= uint(cost)
+	}
 	cost = l.costFunc(key, value)
 	if uint(cost) > l.maxCost {
 		return cost, removed, false

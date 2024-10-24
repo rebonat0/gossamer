@@ -7,7 +7,6 @@ import (
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/dolthub/maphash"
 	"github.com/stretchr/testify/require"
-	"github.com/zeebo/xxh3"
 )
 
 type Hasher struct {
@@ -16,10 +15,6 @@ type Hasher struct {
 
 func (h Hasher) Hash(key ValueCacheKeyHash[hash.H256]) uint32 {
 	return uint32(h.Hasher.Hash(key))
-}
-
-var otherHasher = func(key ValueCacheKeyHash[hash.H256]) uint32 {
-	return uint32(xxh3.HashString(string(key.StorageRoot) + key.StorageKey))
 }
 
 type ValueCacheKeyHash[H runtime.Hash] struct {
@@ -158,4 +153,33 @@ func TestLRU_Purge(t *testing.T) {
 	l.Purge()
 	require.Equal(t, 0, l.Len())
 	require.Equal(t, uint(0), l.currentCost)
+}
+
+func TestLRU_Same_Entries(t *testing.T) {
+	hasher := Hasher{maphash.NewHasher[ValueCacheKeyHash[hash.H256]]()}
+
+	var costFunc = func(key ValueCacheKeyHash[hash.H256], val []byte) uint32 {
+		keyCost := uint32(len(key.StorageKey))
+		return keyCost + uint32(len(val))
+	}
+
+	someKey := ValueCacheKeyHash[hash.H256]{
+		StorageRoot: hash.NewRandomH256(),
+		StorageKey:  string(hash.NewRandomH256()),
+	}
+
+	maxNum := uint(5)
+	maxSize := uint(costFunc(someKey, []byte{1})) * maxNum
+
+	l, err := New[ValueCacheKeyHash[hash.H256], []byte](maxSize, hasher.Hash, costFunc)
+	require.NoError(t, err)
+
+	for i := 0; i < int(maxNum); i++ {
+		added, evicted := l.Add(someKey, []byte{1})
+		require.True(t, added)
+		require.False(t, evicted)
+	}
+	require.Equal(t, 1, l.Len())
+	require.Equal(t, int(l.Cost()), int(costFunc(someKey, []byte{1})))
+
 }
