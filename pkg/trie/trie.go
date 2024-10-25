@@ -5,6 +5,7 @@ package trie
 
 import (
 	"fmt"
+	"iter"
 
 	"github.com/ChainSafe/gossamer/lib/common"
 	"github.com/ChainSafe/gossamer/pkg/trie/tracking"
@@ -84,6 +85,7 @@ type TrieRead interface {
 	Entries() (keyValueMap map[string][]byte)
 	NextKey(key []byte) []byte
 	GetKeysWithPrefix(prefix []byte) (keysLE [][]byte)
+	PrefixedKeys(prefix []byte) iter.Seq[[]byte]
 }
 
 type Trie interface {
