@@ -37,19 +37,8 @@ type KVStoreWrite interface {
 
 type TrieIterator interface {
 	// NextKey performs a depth-first search on the trie and returns the next key
-	// and value based on the current state of the iterator.
-	NextEntry() (entry *Entry)
-
-	// NextKey performs a depth-first search on the trie and returns the next key
 	// based on the current state of the iterator.
 	NextKey() (nextKey []byte)
-
-	// NextKeyFunc performs a depth-first search on the trie and returns the next key
-	// that satisfies the predicate based on the current state of the iterator.
-	NextKeyFunc(predicate func(nextKey []byte) bool) (nextKey []byte)
-
-	// Seek moves the iterator to the first key that is greater than the target key.
-	Seek(targetKey []byte)
 }
 
 type PrefixTrieWrite interface {
