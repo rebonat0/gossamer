@@ -88,6 +88,20 @@ func (t *InMemoryTrie) Entries() (keyValueMap map[string][]byte) {
 	return keyValueMap
 }
 
+// KeysFrom returns an iterator over all keys in the trie that are greater than the given key.
+func (t *InMemoryTrie) KeysFrom(key []byte) iter.Seq[[]byte] {
+	iter := NewInMemoryTrieIterator(WithTrie(t), WithCursorAt(codec.KeyLEToNibbles(key)))
+
+	return func(yield func([]byte) bool) {
+		for key := iter.NextKey(); key != nil; key = iter.NextKey() {
+			if !yield(key) {
+				return
+			}
+		}
+	}
+}
+
+// PrefixedKeys returns an iterator over all keys in the trie that have the given prefix.
 func (t *InMemoryTrie) PrefixedKeys(prefix []byte) iter.Seq[[]byte] {
 	iter := NewInMemoryTrieIterator(WithTrie(t), WithCursorAt(codec.KeyLEToNibbles(prefix)))
 

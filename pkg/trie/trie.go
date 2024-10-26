@@ -79,13 +79,11 @@ type TrieRead interface {
 	Hashable
 	ChildTriesRead
 
-	Iter() TrieIterator
-	PrefixedIter(prefix []byte) TrieIterator
-
 	Entries() (keyValueMap map[string][]byte)
 	NextKey(key []byte) []byte
 	GetKeysWithPrefix(prefix []byte) (keysLE [][]byte)
 	PrefixedKeys(prefix []byte) iter.Seq[[]byte]
+	KeysFrom(key []byte) iter.Seq[[]byte]
 }
 
 type Trie interface {
