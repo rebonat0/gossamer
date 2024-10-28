@@ -42,6 +42,7 @@ type FullSyncConfig struct {
 	BadBlocks          []string
 	NumOfTasks         int
 	RequestMaker       network.RequestMaker
+	Peers              *peerViewSet
 }
 
 type importer interface {
@@ -74,14 +75,11 @@ func NewFullSyncStrategy(cfg *FullSyncConfig) *FullSyncStrategy {
 		reqMaker:      cfg.RequestMaker,
 		blockState:    cfg.BlockState,
 		numOfTasks:    cfg.NumOfTasks,
+		peers:         cfg.Peers,
 		blockImporter: newBlockImporter(cfg),
 		unreadyBlocks: newUnreadyBlocks(),
 		requestQueue: &requestsQueue[*messages.BlockRequestMessage]{
 			queue: list.New(),
-		},
-		peers: &peerViewSet{
-			view:   make(map[peer.ID]peerView),
-			target: 0,
 		},
 	}
 }
