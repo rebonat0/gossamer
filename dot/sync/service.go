@@ -103,7 +103,7 @@ type SyncService struct {
 
 	currentStrategy  Strategy
 	fullSyncStrategy Strategy
-	warpStrategy     Strategy
+	warpSyncStrategy Strategy
 
 	workerPool        *syncWorkerPool
 	waitPeersDuration time.Duration
@@ -125,6 +125,13 @@ func NewSyncService(cfgs ...ServiceConfig) *SyncService {
 
 	for _, cfg := range cfgs {
 		cfg(svc)
+	}
+
+	// Set initial strategy
+	if svc.warpSyncStrategy != nil {
+		svc.currentStrategy = svc.warpSyncStrategy
+	} else {
+		svc.currentStrategy = svc.fullSyncStrategy
 	}
 
 	return svc
@@ -302,7 +309,7 @@ func (s *SyncService) runStrategy() {
 	// TODO: why not use s.currentStrategy.IsSynced()?
 	if done {
 		// Switch to full sync when warp sync finishes
-		if s.warpStrategy != nil {
+		if s.warpSyncStrategy != nil {
 			s.currentStrategy = s.fullSyncStrategy
 		}
 	}
