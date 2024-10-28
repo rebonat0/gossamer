@@ -1395,3 +1395,42 @@ func TestInstance_ExecuteBlock_WndBlock2316689(t *testing.T) {
 
 	require.NoError(t, err)
 }
+
+func TestInstance_ExecuteBlock_WndBlock2322948(t *testing.T) {
+	wnd2322947Trie := newTrieFromKeyValueList(t, "./testdata/westend/state2322947.bin")
+	expectedRoot := common.MustHexToHash("0xe659fe4a7cbdc8603e579212e6959c284490d7a8b861df7e6c64f58eba80253c")
+	require.Equal(t, expectedRoot, wnd2322947Trie.MustHash())
+
+	state := storage.NewTrieState(wnd2322947Trie)
+	inMemoryDB, err := database.NewPebble("", true)
+	require.NoError(t, err)
+
+	cfg := Config{
+		Storage: state,
+		LogLvl:  log.Trace,
+		NodeStorage: runtime.NodeStorage{
+			LocalStorage:      inMemoryDB,
+			PersistentStorage: inMemoryDB,
+			BaseDB:            inMemoryDB,
+		},
+	}
+
+	instance, err := NewInstanceFromTrie(wnd2322947Trie, cfg)
+	require.NoError(t, err)
+
+	rawBlock2322948, err := os.ReadFile("./testdata/westend/block2322948.bin")
+	require.NoError(t, err)
+
+	blockResponse := &messages.BlockResponseMessage{}
+	err = blockResponse.Decode(common.MustHexToBytes(string(rawBlock2322948)))
+	require.NoError(t, err)
+
+	block2322948 := blockResponse.BlockData[0]
+
+	_, err = instance.ExecuteBlock(&types.Block{
+		Header: *block2322948.Header,
+		Body:   *block2322948.Body,
+	})
+
+	require.NoError(t, err)
+}
