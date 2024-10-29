@@ -4,8 +4,6 @@
 package dot
 
 import (
-	"os"
-	rt "runtime"
 	"testing"
 
 	"github.com/ChainSafe/gossamer/dot/state"
@@ -21,9 +19,6 @@ import (
 )
 
 func Test_createRuntimeStorage(t *testing.T) {
-	t.Logf("****************************************************************************** NumCPU: %d", rt.NumCPU())
-	t.Logf("************************************************************** GOMAXPROCS: %s", os.Getenv("GOMAXPROCS"))
-
 	config := DefaultTestWestendDevConfig(t)
 
 	config.ChainSpec = NewTestGenesisRawFile(t, config)
@@ -56,8 +51,6 @@ func Test_createRuntimeStorage(t *testing.T) {
 			assert.NotNil(t, got.PersistentStorage)
 		})
 	}
-
-	require.True(t, false)
 }
 
 func Test_createSystemService(t *testing.T) {
