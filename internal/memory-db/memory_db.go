@@ -223,8 +223,8 @@ func (HashKey[Hash]) Key(hash Hash, prefix hashdb.Prefix) Hash {
 // / Key function that concatenates prefix and hash.
 type PrefixedKey[H Hash] struct{}
 
-func (PrefixedKey[H]) Key(key H, prefix hashdb.Prefix) H {
-	return *new(H)
+func (PrefixedKey[H]) Key(key H, prefix hashdb.Prefix) string {
+	return string(NewPrefixedKey(key, prefix))
 }
 
 func NewPrefixedKey[H Hash](key H, prefix hashdb.Prefix) []byte {

@@ -11,7 +11,7 @@ import (
 
 var (
 	_ KeyFunction[hash.H256, hash.H256] = HashKey[hash.H256]{}
-	_ KeyFunction[hash.H256, hash.H256] = PrefixedKey[hash.H256]{}
+	_ KeyFunction[hash.H256, string]    = PrefixedKey[hash.H256]{}
 )
 
 // / Blake2-256 Hash implementation.
