@@ -4,6 +4,7 @@
 package dot
 
 import (
+	"fmt"
 	"os"
 	rt "runtime"
 	"testing"
@@ -21,6 +22,7 @@ import (
 )
 
 func Test_createRuntimeStorage(t *testing.T) {
+	panic(fmt.Sprintf("****************************************************************************** NumCPU: %d", rt.NumCPU()))
 	t.Logf("****************************************************************************** NumCPU: %d", rt.NumCPU())
 	t.Logf("************************************************************** GOMAXPROCS: %s", os.Getenv("GOMAXPROCS"))
 
