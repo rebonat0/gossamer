@@ -109,8 +109,6 @@ func TestCandidateValidation_wasm_invalid_magic_number(t *testing.T) {
 }
 
 func TestCandidateValidation_processMessageValidateFromExhaustive(t *testing.T) {
-	t.Parallel()
-
 	candidateReceipt, validationCode := createTestCandidateReceiptAndValidationCodeWParaId(t, 1000)
 	candidateReceipt2 := candidateReceipt
 	candidateReceipt2.Descriptor.PovHash = common.MustHexToHash(
@@ -254,7 +252,6 @@ func TestCandidateValidation_processMessageValidateFromExhaustive(t *testing.T) 
 	for name, tt := range tests {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			overseerToSubsystem <- tt.msg
 			result := <-sender
 			require.Equal(t, tt.want, result)
@@ -263,8 +260,6 @@ func TestCandidateValidation_processMessageValidateFromExhaustive(t *testing.T) 
 }
 
 func TestCandidateValidation_processMessageValidateFromChainState(t *testing.T) {
-	t.Parallel()
-
 	candidateReceipt, validationCode := createTestCandidateReceiptAndValidationCodeWParaId(t, 1000)
 	candidateReceipt2 := candidateReceipt
 	candidateReceipt2.Descriptor.PovHash = common.MustHexToHash(
@@ -498,8 +493,6 @@ func TestCandidateValidation_processMessageValidateFromChainState(t *testing.T) 
 	for name, tt := range tests {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			sender := make(chan parachaintypes.OverseerFuncRes[ValidationResult])
 			tt.msg.Ch = sender
 
@@ -511,7 +504,6 @@ func TestCandidateValidation_processMessageValidateFromChainState(t *testing.T) 
 }
 
 func Test_precheckPvF(t *testing.T) {
-	t.Parallel()
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 	candidate, validationCode := createTestCandidateReceiptAndValidationCodeWParaId(t, 1000)
@@ -615,8 +607,6 @@ func Test_precheckPvF(t *testing.T) {
 		tt := tt
 
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			candidateValidationSubsystem := CandidateValidation{
 				pvfHost:    newValidationHost(),
 				BlockState: mockBlockState,

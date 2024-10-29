@@ -21,7 +21,6 @@ func createTestValidationCode(t *testing.T) parachaintypes.ValidationCode {
 }
 
 func TestValidationWorkerPool_newValidationWorker(t *testing.T) {
-	t.Parallel()
 	testValidationCode := createTestValidationCode(t)
 
 	cases := map[string]struct {
@@ -53,8 +52,6 @@ func TestValidationWorkerPool_newValidationWorker(t *testing.T) {
 	for tname, tt := range cases {
 		tt := tt
 		t.Run(tname, func(t *testing.T) {
-			t.Parallel()
-
 			workerPool := tt.setupWorkerPool(t)
 
 			require.ElementsMatch(t,

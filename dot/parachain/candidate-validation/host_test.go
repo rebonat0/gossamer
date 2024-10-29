@@ -11,7 +11,6 @@ import (
 )
 
 func TestHost_validate(t *testing.T) {
-	t.Parallel()
 	candidateReceipt, validationCode := createTestCandidateReceiptAndValidationCodeWParaId(t, 1000)
 	candidateReceipt2 := candidateReceipt
 	candidateReceipt2.Descriptor.PovHash = common.MustHexToHash(
@@ -202,8 +201,6 @@ func TestHost_validate(t *testing.T) {
 	for name, tt := range tests {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			taskResult, err := pvfHost.validate(tt.validationTask)
 
 			require.NoError(t, err)
@@ -214,7 +211,6 @@ func TestHost_validate(t *testing.T) {
 }
 
 func TestHost_performBasicChecks(t *testing.T) {
-	t.Parallel()
 	paramsTooLarge := ParamsTooLarge
 	povHashMismatch := PoVHashMismatch
 	codeHashMismatch := CodeHashMismatch
@@ -316,7 +312,6 @@ func TestHost_performBasicChecks(t *testing.T) {
 	for name, tt := range tests {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			validationError, internalError := performBasicChecks(tt.args.candidate, tt.args.maxPoVSize, tt.args.pov,
 				tt.args.validationCodeHash)
 			require.NoError(t, internalError)
