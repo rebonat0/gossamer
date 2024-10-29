@@ -191,7 +191,6 @@ func (s *SyncService) HandleBlockAnnounceHandshake(from peer.ID, msg *network.Bl
 func (s *SyncService) HandleBlockAnnounce(from peer.ID, msg *network.BlockAnnounceMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	logger.Infof("receiving a block announce from %s", from.String())
 
 	repChange, err := s.currentStrategy.OnBlockAnnounce(from, msg)
 
