@@ -240,3 +240,20 @@ func (n NibbleSlice) NodeKey() NodeKey {
 func (n NibbleSlice) Inner() []byte {
 	return n.inner
 }
+
+func (n NibbleSlice) StartsWithNibbles(other Nibbles) bool {
+	if n.Len() < other.Len() {
+		return false
+	}
+
+	nAsNibbles := n.asNibbles()
+	if nAsNibbles != nil {
+		return nAsNibbles.StartsWith(other)
+	}
+	for i := uint(0); i < other.Len(); i++ {
+		if n.At(i) != other.At(i) {
+			return false
+		}
+	}
+	return true
+}

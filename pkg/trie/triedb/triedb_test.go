@@ -1533,4 +1533,297 @@ func Test_TrieDB(t *testing.T) {
 		}
 	})
 
+	t.Run("test_merkle_value_internal", func(t *testing.T) {
+		for _, version := range []trie.TrieLayout{
+			trie.V0,
+			trie.V1,
+		} {
+			t.Run(version.String(), func(t *testing.T) {
+				keyValues := []struct {
+					key   []byte
+					value []byte
+				}{
+					{[]byte("A"), bytes.Repeat([]byte{1}, 64)},
+					{[]byte("AA"), bytes.Repeat([]byte{2}, 64)},
+					{[]byte("AAAA"), bytes.Repeat([]byte{3}, 64)},
+					{[]byte("AAB"), bytes.Repeat([]byte{4}, 64)},
+					{[]byte("AABBBB"), bytes.Repeat([]byte{4}, 1)},
+					{[]byte("AB"), bytes.Repeat([]byte{5}, 1)},
+					{[]byte("B"), bytes.Repeat([]byte{6}, 1)},
+				}
+
+				db := NewMemoryDB()
+				var root hash.H256
+				{
+					trie := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
+					trie.SetVersion(version)
+					for _, entry := range keyValues {
+						require.NoError(t, trie.Put(entry.key, entry.value))
+					}
+					err := trie.commit()
+					require.NoError(t, err)
+					require.NotEmpty(t, trie.rootHash)
+					root = trie.rootHash
+				}
+
+				trie := NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db)
+				trie.SetVersion(version)
+				for _, entry := range keyValues {
+					h, err := trie.LookupFirstDescendant(entry.key)
+					require.NoError(t, err)
+					require.NotNil(t, h)
+				}
+
+				// Key is not present and has no descedant, but shares a prefix.
+				for _, key := range []string{
+					"AAAAX", "AABX", "ABX", "AABBBX", "BX", "AC", "AAAAX",
+					"C", // Key shares the first nibble with b"A".
+				} {
+					mv, err := trie.LookupFirstDescendant([]byte(key))
+					require.NoError(t, err)
+					require.Nil(t, mv)
+				}
+
+				// Key not present, but has a descendent.
+				hash, err := trie.LookupFirstDescendant([]byte("AAA"))
+				require.NoError(t, err)
+				require.NotNil(t, hash)
+				expected, err := trie.LookupFirstDescendant([]byte("AAAA"))
+				require.NoError(t, err)
+				require.NotNil(t, expected)
+				require.Equal(t, expected, hash)
+
+				hash, err = trie.LookupFirstDescendant([]byte("AABB"))
+				require.NoError(t, err)
+				require.NotNil(t, hash)
+				expected, err = trie.LookupFirstDescendant([]byte("AABBBB"))
+				require.NoError(t, err)
+				require.NotNil(t, expected)
+				require.Equal(t, expected, hash)
+
+				hash, err = trie.LookupFirstDescendant([]byte("AABBB"))
+				require.NoError(t, err)
+				require.NotNil(t, hash)
+				expected, err = trie.LookupFirstDescendant([]byte("AABBBB"))
+				require.NoError(t, err)
+				require.NotNil(t, expected)
+				require.Equal(t, expected, hash)
+
+				// Prefix AABB in between AAB and AABBBB, but has different ending char.
+				hash, err = trie.LookupFirstDescendant([]byte("AABBX"))
+				require.NoError(t, err)
+				require.Nil(t, hash)
+			})
+		}
+	})
+
+	t.Run("test_merkle_value_branches_internal", func(t *testing.T) {
+		for _, version := range []trie.TrieLayout{
+			trie.V0,
+			trie.V1,
+		} {
+			t.Run(version.String(), func(t *testing.T) {
+				keyValues := []struct {
+					key   []byte
+					value []byte
+				}{
+					{[]byte("AAAA"), bytes.Repeat([]byte{1}, 64)},
+					{[]byte("AABA"), bytes.Repeat([]byte{2}, 64)},
+				}
+
+				db := NewMemoryDB()
+				var root hash.H256
+				{
+					trie := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
+					trie.SetVersion(version)
+					for _, entry := range keyValues {
+						require.NoError(t, trie.Put(entry.key, entry.value))
+					}
+					err := trie.commit()
+					require.NoError(t, err)
+					require.NotEmpty(t, trie.rootHash)
+					root = trie.rootHash
+				}
+
+				trie := NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db)
+				trie.SetVersion(version)
+
+				// The hash is returned from the branch node.
+				hash, err := trie.LookupFirstDescendant([]byte("A"))
+				require.NoError(t, err)
+				require.NotNil(t, hash)
+				aaaa_hash, err := trie.LookupFirstDescendant([]byte("AAAA"))
+				require.NoError(t, err)
+				require.NotNil(t, aaaa_hash)
+				aaba_hash, err := trie.LookupFirstDescendant([]byte("AABA"))
+				require.NoError(t, err)
+				require.NotNil(t, aaba_hash)
+
+				assert.NotEqual(t, hash, aaaa_hash)
+				assert.NotEqual(t, hash, aaba_hash)
+			})
+		}
+	})
+
+	t.Run("test_merkle_value_empty_trie_internal", func(t *testing.T) {
+		for _, version := range []trie.TrieLayout{
+			trie.V0,
+			trie.V1,
+		} {
+			t.Run(version.String(), func(t *testing.T) {
+				keyValues := []struct {
+					key   []byte
+					value []byte
+				}{
+					// test for both empty cases
+					{[]byte{}, []byte{}},
+					{nil, nil},
+					{[]byte{}, nil},
+					{nil, []byte{}},
+				}
+
+				for _, entry := range keyValues {
+					db := NewMemoryDB()
+					var root hash.H256
+					{
+						trie := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
+						trie.SetVersion(version)
+
+						require.NoError(t, trie.Put(entry.key, entry.value))
+
+						err := trie.commit()
+						require.NoError(t, err)
+						require.NotEmpty(t, trie.rootHash)
+						// Valid state root.
+						root = trie.rootHash
+					}
+
+					// Data set is empty.
+					trie := NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db)
+					trie.SetVersion(version)
+					hash, err := trie.LookupFirstDescendant([]byte("A"))
+					require.NoError(t, err)
+					require.Nil(t, hash)
+
+					hash, err = trie.LookupFirstDescendant([]byte("A"))
+					require.NoError(t, err)
+					require.Nil(t, hash)
+
+					hash, err = trie.LookupFirstDescendant([]byte("AA"))
+					require.NoError(t, err)
+					require.Nil(t, hash)
+
+					hash, err = trie.LookupFirstDescendant([]byte("AAA"))
+					require.NoError(t, err)
+					require.Nil(t, hash)
+
+					hash, err = trie.LookupFirstDescendant([]byte("AAAA"))
+					require.NoError(t, err)
+					require.Nil(t, hash)
+				}
+			})
+		}
+	})
+
+	t.Run("test_merkle_value_modification_internal", func(t *testing.T) {
+		for _, version := range []trie.TrieLayout{
+			trie.V0,
+			trie.V1,
+		} {
+			t.Run(version.String(), func(t *testing.T) {
+				keyValues := []struct {
+					key   []byte
+					value []byte
+				}{
+					{[]byte("AAAA"), bytes.Repeat([]byte{1}, 64)},
+					{[]byte("AABA"), bytes.Repeat([]byte{2}, 64)},
+				}
+
+				db := NewMemoryDB()
+				var root hash.H256
+				{
+					trie := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
+					trie.SetVersion(version)
+					for _, entry := range keyValues {
+						require.NoError(t, trie.Put(entry.key, entry.value))
+					}
+					err := trie.commit()
+					require.NoError(t, err)
+					require.NotEmpty(t, trie.rootHash)
+					root = trie.rootHash
+				}
+
+				var (
+					aHashLHS    MerkleValue[hash.H256]
+					aaaaHashLHS MerkleValue[hash.H256]
+					aabaHashLHS MerkleValue[hash.H256]
+				)
+				{
+					trie := NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db)
+					trie.SetVersion(version)
+
+					// The hash is returned from the branch node.
+					hash, err := trie.LookupFirstDescendant([]byte("A"))
+					require.NoError(t, err)
+					require.NotNil(t, hash)
+					aaaa_hash, err := trie.LookupFirstDescendant([]byte("AAAA"))
+					require.NoError(t, err)
+					require.NotNil(t, aaaa_hash)
+					aaba_hash, err := trie.LookupFirstDescendant([]byte("AABA"))
+					require.NoError(t, err)
+					require.NotNil(t, aaba_hash)
+
+					// Ensure the hash is not from any leaf.
+					assert.NotEqual(t, hash, aaaa_hash)
+					assert.NotEqual(t, hash, aaba_hash)
+
+					aHashLHS = hash
+					aaaaHashLHS = aaaa_hash
+					aabaHashLHS = aaba_hash
+				}
+
+				var (
+					aHashRHS    MerkleValue[hash.H256]
+					aaaaHashRHS MerkleValue[hash.H256]
+					aabaHashRHS MerkleValue[hash.H256]
+				)
+				// Modify AABA and expect AAAA to return the same merkle value
+				{
+					trie := NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db)
+					trie.SetVersion(version)
+					require.NoError(t, trie.Put([]byte("AABA"), bytes.Repeat([]byte{3}, 64)))
+					err := trie.commit()
+					require.NoError(t, err)
+					require.NotEmpty(t, trie.rootHash)
+					require.NotEqual(t, root, trie.rootHash)
+
+					// The hash is returned from the branch node.
+					hash, err := trie.LookupFirstDescendant([]byte("A"))
+					require.NoError(t, err)
+					require.NotNil(t, hash)
+					aaaa_hash, err := trie.LookupFirstDescendant([]byte("AAAA"))
+					require.NoError(t, err)
+					require.NotNil(t, aaaa_hash)
+					aaba_hash, err := trie.LookupFirstDescendant([]byte("AABA"))
+					require.NoError(t, err)
+					require.NotNil(t, aaba_hash)
+
+					// Ensure the hash is not from any leaf.
+					require.NotEqual(t, hash, aaaa_hash)
+					require.NotEqual(t, hash, aaba_hash)
+
+					aHashRHS = hash
+					aaaaHashRHS = aaaa_hash
+					aabaHashRHS = aaba_hash
+				}
+
+				// AAAA was not modified.
+				require.Equal(t, aaaaHashLHS, aaaaHashRHS)
+				// Changes to AABA must propagate to the root.
+				require.NotEqual(t, aabaHashLHS, aabaHashRHS)
+				require.NotEqual(t, aHashLHS, aHashRHS)
+
+			})
+		}
+	})
 }

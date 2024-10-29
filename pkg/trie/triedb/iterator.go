@@ -6,6 +6,7 @@ package triedb
 import (
 	"bytes"
 	"fmt"
+	"iter"
 
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/codec"
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb/hash"
@@ -496,4 +497,159 @@ func (ri *TrieDBRawIterator[H, Hasher]) NextKey() ([]byte, error) {
 type TrieItem struct {
 	Key   []byte
 	Value []byte
+}
+
+// / A trie iterator that also supports random access (`seek()`).
+type TrieIterator[H hash.Hash, Item any] interface {
+	Seek(key []byte) error
+	Next() (Item, error)
+	Items() iter.Seq2[Item, error]
+}
+
+// / Iterator for going through all values in the trie in pre-order traversal order.
+type TrieDBIterator[H hash.Hash, Hasher hash.Hasher[H]] struct {
+	db      *TrieDB[H, Hasher]
+	rawIter TrieDBRawIterator[H, Hasher]
+}
+
+// / Create a new iterator.
+func NewTrieDBIterator[H hash.Hash, Hasher hash.Hasher[H]](
+	db *TrieDB[H, Hasher],
+) (*TrieDBIterator[H, Hasher], error) {
+	rawIter, err := NewTrieDBRawIterator(db)
+	if err != nil {
+		return nil, err
+	}
+	return &TrieDBIterator[H, Hasher]{
+		db:      db,
+		rawIter: *rawIter,
+	}, nil
+}
+
+// / Create a new iterator, but limited to a given prefix.
+func NewPrefixedTrieDBIterator[H hash.Hash, Hasher hash.Hasher[H]](
+	db *TrieDB[H, Hasher], prefix []byte,
+) (*TrieDBIterator[H, Hasher], error) {
+	rawIter, err := NewPrefixedTrieDBRawIterator(db, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return &TrieDBIterator[H, Hasher]{
+		db:      db,
+		rawIter: *rawIter,
+	}, nil
+}
+
+// / Create a new iterator, but limited to a given prefix.
+// / It then do a seek operation from prefixed context (using `seek` lose
+// / prefix context by default).
+func NewPrefixedTrieDBIteratorThenSeek[H hash.Hash, Hasher hash.Hasher[H]](
+	db *TrieDB[H, Hasher], prefix []byte, startAt []byte,
+) (*TrieDBIterator[H, Hasher], error) {
+	rawIter, err := NewPrefixedTrieDBRawIteratorThenSeek(db, prefix, startAt)
+	if err != nil {
+		return nil, err
+	}
+	return &TrieDBIterator[H, Hasher]{
+		db:      db,
+		rawIter: *rawIter,
+	}, nil
+}
+
+func (tdbi *TrieDBIterator[H, Hasher]) Seek(key []byte) error {
+	_, err := tdbi.rawIter.seek(key, true)
+	return err
+}
+
+func (tdbi *TrieDBIterator[H, Hasher]) Next() (*TrieItem, error) {
+	return tdbi.rawIter.NextItem()
+}
+
+func (tdbi *TrieDBIterator[H, Hasher]) Items() iter.Seq2[TrieItem, error] {
+	return func(yield func(TrieItem, error) bool) {
+		for {
+			item, err := tdbi.Next()
+			if err != nil {
+				return
+			}
+			if item == nil {
+				return
+			}
+			if !yield(*item, err) {
+				return
+			}
+		}
+	}
+}
+
+// / Iterator for going through all of key with values in the trie in pre-order traversal order.
+type TrieDBKeyIterator[H hash.Hash, Hasher hash.Hasher[H]] struct {
+	rawIter TrieDBRawIterator[H, Hasher]
+}
+
+// / Create a new iterator.
+func NewTrieDBKeyIterator[H hash.Hash, Hasher hash.Hasher[H]](
+	db *TrieDB[H, Hasher],
+) (*TrieDBKeyIterator[H, Hasher], error) {
+	rawIter, err := NewTrieDBRawIterator(db)
+	if err != nil {
+		return nil, err
+	}
+	return &TrieDBKeyIterator[H, Hasher]{
+		rawIter: *rawIter,
+	}, nil
+}
+
+// / Create a new iterator, but limited to a given prefix.
+func NewPrefixedTrieDBKeyIterator[H hash.Hash, Hasher hash.Hasher[H]](
+	db *TrieDB[H, Hasher], prefix []byte,
+) (*TrieDBKeyIterator[H, Hasher], error) {
+	rawIter, err := NewPrefixedTrieDBRawIterator(db, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return &TrieDBKeyIterator[H, Hasher]{
+		rawIter: *rawIter,
+	}, nil
+}
+
+// / Create a new iterator, but limited to a given prefix.
+// / It then do a seek operation from prefixed context (using `seek` lose
+// / prefix context by default).
+func NewPrefixedTrieDBKeyIteratorThenSeek[H hash.Hash, Hasher hash.Hasher[H]](
+	db *TrieDB[H, Hasher], prefix []byte, startAt []byte,
+) (*TrieDBKeyIterator[H, Hasher], error) {
+	rawIter, err := NewPrefixedTrieDBRawIteratorThenSeek(db, prefix, startAt)
+	if err != nil {
+		return nil, err
+	}
+	return &TrieDBKeyIterator[H, Hasher]{
+		rawIter: *rawIter,
+	}, nil
+}
+
+func (tdbki *TrieDBKeyIterator[H, Hasher]) Seek(key []byte) error {
+	_, err := tdbki.rawIter.seek(key, true)
+	return err
+}
+
+func (tdbki *TrieDBKeyIterator[H, Hasher]) Next() ([]byte, error) {
+	return tdbki.rawIter.NextKey()
+}
+
+func (tdbki *TrieDBKeyIterator[H, Hasher]) Items() iter.Seq2[[]byte, error] {
+	return func(yield func([]byte, error) bool) {
+		for {
+			key, err := tdbki.Next()
+			if err != nil {
+				return
+			}
+			if key == nil {
+				return
+			}
+			if !yield(key, err) {
+				return
+			}
+		}
+	}
 }

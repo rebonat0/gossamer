@@ -57,6 +57,156 @@ func (l *TrieLookup[H, Hasher, QueryItem]) recordAccess(access TrieAccess) {
 	}
 }
 
+// / Look up the merkle value (hash) of the node that is the closest descendant for the provided
+// / key.
+// /
+// / When the provided key leads to a node, then the merkle value (hash) of that node
+// / is returned. However, if the key does not lead to a node, then the merkle value
+// / of the closest descendant is returned. `None` if no such descendant exists.
+func (l *TrieLookup[H, Hasher, QueryItem]) LookupFirstDescendant(fullKey []byte, nibbleKey nibbles.Nibbles) (MerkleValue[H], error) {
+	partial := nibbleKey
+	hash := l.hash
+	var keyNibbles uint
+
+	// this loop iterates through non-inline nodes.
+	var depth uint
+	for {
+		var nodeData []byte
+
+		var getCachedNode = func() (CachedNode[H], error) {
+			data := l.db.Get(hash, hashdb.Prefix(nibbleKey.Mid(keyNibbles).Left()))
+			if data == nil {
+				if depth == 0 {
+					return nil, ErrInvalidStateRoot
+				} else {
+					return nil, ErrIncompleteDB
+				}
+			}
+
+			reader := bytes.NewReader(data)
+			decoded, err := codec.Decode[H](reader)
+			if err != nil {
+				return nil, err
+			}
+
+			owned, err := newCachedNodeFromNode[H, Hasher](decoded)
+			if err != nil {
+				return nil, err
+			}
+			nodeData = data
+			return owned, nil
+		}
+
+		var node CachedNode[H]
+		if l.cache != nil {
+			n, err := l.cache.GetOrInsertNode(hash, getCachedNode)
+			if err != nil {
+				return nil, err
+			}
+
+			l.recordAccess(CachedNodeAccess[H]{Hash: hash, Node: node})
+			node = n
+		} else {
+			n, err := getCachedNode()
+			if err != nil {
+				return nil, err
+			}
+
+			l.recordAccess(EncodedNodeAccess[H]{Hash: hash, EncodedNode: nodeData})
+			node = n
+		}
+
+		// this loop iterates through all inline children (usually max 1)
+		// without incrementing the depth.
+		var isInline bool
+	inlineLoop:
+		for {
+			var nextNode CachedNodeHandle
+			switch node := node.(type) {
+			case LeafCachedNode[H]:
+				// The leaf slice can be longer than remainder of the provided key
+				// (descendent), but not the other way around.
+				if !node.PartialKey.StartsWithNibbles(partial) {
+					l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+					return nil, nil
+				}
+
+				if partial.Len() != node.PartialKey.Len() {
+					l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+				}
+
+				if isInline {
+					return NodeMerkleValue(nodeData), nil
+				}
+				return HashMerkleValue[H]{Hash: hash}, nil
+			case BranchCachedNode[H]:
+				// Not enough remainder key to continue the search.
+				if partial.Len() < node.PartialKey.Len() {
+					l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+
+					// Branch slice starts with the remainder key, there's nothing to
+					// advance.
+					if node.PartialKey.StartsWithNibbles(partial) {
+						if isInline {
+							return NodeMerkleValue(nodeData), nil
+						}
+						return HashMerkleValue[H]{Hash: hash}, nil
+					}
+					return nil, nil
+				}
+
+				// Partial key is longer or equal than the branch slice.
+				// Ensure partial key starts with the branch slice.
+				if !partial.StartsWithNibbleSlice(node.PartialKey) {
+					l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+					return nil, nil
+				}
+
+				// Partial key starts with the branch slice.
+				if partial.Len() == node.PartialKey.Len() {
+					if node.Value != nil {
+						l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+					}
+
+					if isInline {
+						return NodeMerkleValue(nodeData), nil
+					}
+					return HashMerkleValue[H]{Hash: hash}, nil
+				}
+
+				child := node.Children[partial.At(node.PartialKey.Len())]
+				if child != nil {
+					partial = partial.Mid(node.PartialKey.Len() + 1)
+					keyNibbles += node.PartialKey.Len() + 1
+					nextNode = child
+				} else {
+					l.recordAccess(NonExistingNodeAccess{fullKey})
+					return nil, nil
+				}
+			case EmptyCachedNode[H]:
+				l.recordAccess(NonExistingNodeAccess{FullKey: fullKey})
+				return nil, nil
+			default:
+				panic("unreachable")
+			}
+
+			// check if new node data is inline or hash.
+			switch nextNode := nextNode.(type) {
+			case HashCachedNodeHandle[H]:
+				hash = nextNode.Hash
+				break inlineLoop
+			case InlineCachedNodeHandle[H]:
+				node = nextNode.CachedNode
+				isInline = true
+			default:
+				panic("unreachable")
+			}
+		}
+
+		depth++
+	}
+}
+
 // Look up the given fullKey.
 // If the value is found, it will be passed to the [Query] associated to [TrieLookup].
 //

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/ChainSafe/gossamer/pkg/trie"
 
@@ -38,6 +39,13 @@ func WithRecorder[H hash.Hash, Hasher hash.Hasher[H]](r TrieRecorder) TrieDBOpts
 		t.recorder = r
 	}
 }
+
+type TrieLayout = trie.TrieLayout
+
+var (
+	V0 = trie.V0
+	V1 = trie.V1
+)
 
 // TrieDB is a DB-backed patricia merkle trie implementation
 // using lazy loading to fetch nodes
@@ -93,7 +101,7 @@ func NewTrieDB[H hash.Hash, Hasher hash.Hasher[H]](
 	return trieDB
 }
 
-func (t *TrieDB[H, Hasher]) SetVersion(v trie.TrieLayout) {
+func (t *TrieDB[H, Hasher]) SetVersion(v TrieLayout) {
 	if v < t.version {
 		panic("cannot regress trie version")
 	}
@@ -274,7 +282,7 @@ func (t *TrieDB[H, Hasher]) insert(keyNibbles nibbles.Nibbles, value []byte) err
 
 // Put inserts the given key / value pair into the trie
 func (t *TrieDB[H, Hasher]) Put(key, value []byte) error {
-	return t.insert(nibbles.NewNibbles(key), value)
+	return t.insert(nibbles.NewNibbles(slices.Clone(key)), value)
 }
 
 // insertAt inserts the given key / value pair into the node referenced by the
@@ -1144,3 +1152,46 @@ func GetWith[H hash.Hash, Hasher hash.Hasher[H], QueryItem any](
 	)
 	return lookup.Lookup(key)
 }
+
+func (t *TrieDB[H, Hasher]) LookupFirstDescendant(key []byte) (MerkleValue[H], error) {
+	lookup := NewTrieLookup[H, Hasher](
+		t.db, t.rootHash, t.cache, t.recorder, func([]byte) any { return nil },
+	)
+	return lookup.LookupFirstDescendant(key, nibbles.NewNibbles(slices.Clone(key)))
+}
+
+// func (t *TrieDB[H, Hasher]) Iterator() (TrieIterator[H, *TrieItem], error) {
+// 	return NewTrieDBIterator(t)
+// }
+
+func (t *TrieDB[H, Hasher]) KeyIterator() (TrieIterator[H, []byte], error) {
+	return NewTrieDBKeyIterator(t)
+}
+
+type MerkleValues[H any] interface {
+	NodeMerkleValue | HashMerkleValue[H]
+	MerkleValue[H]
+}
+
+// / Either the `hash` or `value` of a node depending on its size.
+// /
+// / If the size of the node `value` is bigger or equal than `MAX_INLINE_VALUE` the `hash` is
+// / returned.
+type MerkleValue[H any] interface {
+	isMerkleValue()
+}
+
+// / The merkle value is the node data itself when the
+// / node data is smaller than `MAX_INLINE_VALUE`.
+// /
+// / Note: The case of inline nodes.
+type NodeMerkleValue []byte
+
+func (NodeMerkleValue) isMerkleValue() {}
+
+// / The merkle value is the hash of the node.
+type HashMerkleValue[H any] struct {
+	Hash H
+}
+
+func (HashMerkleValue[H]) isMerkleValue() {}
