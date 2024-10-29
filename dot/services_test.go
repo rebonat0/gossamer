@@ -4,6 +4,9 @@
 package dot
 
 import (
+	"fmt"
+	"os"
+	rt "runtime"
 	"testing"
 
 	"github.com/ChainSafe/gossamer/dot/state"
@@ -19,6 +22,9 @@ import (
 )
 
 func Test_createRuntimeStorage(t *testing.T) {
+	fmt.Println("****************************************************************************** NumCPU:", rt.NumCPU())
+	fmt.Println("************************************************************** GOMAXPROCS:", os.Getenv("GOMAXPROCS"))
+
 	config := DefaultTestWestendDevConfig(t)
 
 	config.ChainSpec = NewTestGenesisRawFile(t, config)
