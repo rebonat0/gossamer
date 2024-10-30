@@ -29,7 +29,8 @@ import (
 )
 
 var (
-	logger = log.NewFromGlobal(log.AddContext("pkg", "parachain-overseer"))
+	logger               = log.NewFromGlobal(log.AddContext("pkg", "parachain-overseer"))
+	ParachainHostAPIName = common.MustBlake2b8([]byte("ParachainHost"))
 )
 
 type Overseer interface {
@@ -215,24 +216,16 @@ func (o *OverseerSystem) handleBlockEvents() {
 			o.activeLeaves[imported.Header.Hash()] = uint32(imported.Header.Number)
 			delete(o.activeLeaves, imported.Header.ParentHash)
 
-			// TODO:
-			/*
-				- Add active leaf only if given head supports parachain consensus.
-				- You do that by checking the parachain host runtime api version.
-				- If the parachain host runtime api version is at least 1, then the parachain consensus is supported.
+			supports, err := o.headSupportsParachain(imported.Header.Hash())
+			if err != nil {
+				logger.Criticalf("checking head supports parachain: %s", err.Error())
+				return
+			}
 
-					#[async_trait::async_trait]
-					impl<Client> HeadSupportsParachains for Arc<Client>
-					where
-						Client: RuntimeApiSubsystemClient + Sync + Send,
-					{
-						async fn head_supports_parachains(&self, head: &Hash) -> bool {
-							// Check that the `ParachainHost` runtime api is at least with version 1 present on chain.
-							self.api_version_parachain_host(*head).await.ok().flatten().unwrap_or(0) >= 1
-						}
-					}
+			if !supports {
+				return
+			}
 
-			*/
 			activeLeavesUpdate := parachaintypes.ActiveLeavesUpdateSignal{
 				Activated: &parachaintypes.ActivatedLeaf{
 					Hash:   imported.Header.Hash(),
@@ -270,11 +263,29 @@ func (o *OverseerSystem) handleBlockEvents() {
 		}
 	}
 }
-
 func (o *OverseerSystem) broadcast(msg any) {
 	for _, overseerToSubSystem := range o.subsystems {
 		overseerToSubSystem <- msg
 	}
+}
+
+func (o *OverseerSystem) headSupportsParachain(hash common.Hash) (bool, error) {
+	instance, err := o.blockState.GetRuntime(hash)
+	if err != nil {
+		return false, fmt.Errorf("getting runtime: %w", err)
+	}
+
+	runtimeVersion, err := instance.Version()
+	if err != nil {
+		return false, fmt.Errorf("getting runtime version: %w", err)
+	}
+
+	ver, found := runtimeVersion.At(ParachainHostAPIName[:])
+	if !found {
+		return false, nil
+	}
+
+	return ver >= 1, nil
 }
 
 func (o *OverseerSystem) Stop() error {
