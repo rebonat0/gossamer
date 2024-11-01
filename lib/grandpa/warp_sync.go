@@ -164,7 +164,7 @@ func (p *WarpSyncProofProvider) CurrentAuthorities() (primitives.AuthorityList, 
 		}
 
 		authorityList = append(authorityList, primitives.AuthorityIDWeight{
-			AuthorityID:     primitives.AuthorityID(key),
+			AuthorityID:     key,
 			AuthorityWeight: primitives.AuthorityWeight(auth.ID),
 		})
 	}
