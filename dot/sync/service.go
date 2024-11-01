@@ -287,11 +287,7 @@ func (s *SyncService) runStrategy() {
 			return
 		}
 
-		_, err = s.workerPool.SubmitBatch(tasks)
-		if err != nil {
-			logger.Criticalf("current sync strategy next actions failed with: %s", err.Error())
-			return
-		}
+		_ = s.workerPool.SubmitBatch(tasks)
 	}
 
 	done, repChanges, peersToIgnore, err := s.currentStrategy.Process(s.workerPool.Results())

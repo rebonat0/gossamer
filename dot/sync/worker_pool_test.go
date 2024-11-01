@@ -86,9 +86,7 @@ func TestWorkerPoolHappyPath(t *testing.T) {
 	t.Run("receive_results_on_channel", func(t *testing.T) {
 		wp, tasks := setup()
 		results := make([]TaskResult, 0, numTasks)
-		_, err := wp.SubmitBatch(tasks)
-
-		assert.NoError(t, err)
+		wp.SubmitBatch(tasks)
 
 		for {
 			result := <-wp.Results()
@@ -105,8 +103,7 @@ func TestWorkerPoolHappyPath(t *testing.T) {
 
 	t.Run("check_batch_status_on_completion", func(t *testing.T) {
 		wp, tasks := setup()
-		batchID, err := wp.SubmitBatch(tasks)
-		assert.NoError(t, err)
+		batchID := wp.SubmitBatch(tasks)
 
 		waitForCompletion(wp, numTasks)
 		status, ok := wp.GetBatch(batchID)
@@ -125,8 +122,7 @@ func TestWorkerPoolPeerHandling(t *testing.T) {
 		tasks, _ := makeTasksAndPeers(numTasks, 0)
 		wp := NewWorkerPool(WorkerPoolConfig{})
 
-		_, err := wp.SubmitBatch(tasks)
-		assert.NoError(t, err)
+		wp.SubmitBatch(tasks)
 
 		wp.Shutdown()
 	})
@@ -137,8 +133,7 @@ func TestWorkerPoolPeerHandling(t *testing.T) {
 		assert.NoError(t, wp.AddPeer(peers[0]))
 		assert.NoError(t, wp.AddPeer(peers[1]))
 
-		bID, err := wp.SubmitBatch(tasks)
-		assert.NoError(t, err)
+		bID := wp.SubmitBatch(tasks)
 
 		waitForCompletion(wp, numTasks)
 		status, ok := wp.GetBatch(bID)
@@ -189,9 +184,7 @@ func TestWorkerPoolTaskFailures(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		var err error
-		batchID, err = wp.SubmitBatch(tasks)
-		assert.NoError(t, err)
+		batchID = wp.SubmitBatch(tasks)
 		return
 	}
 
@@ -245,11 +238,9 @@ func TestWorkerPoolMultipleBatches(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		b1ID, err := wp.SubmitBatch(b1Tasks)
-		assert.NoError(t, err)
+		b1ID := wp.SubmitBatch(b1Tasks)
 
-		b2ID, err := wp.SubmitBatch(b2Tasks)
-		assert.NoError(t, err)
+		b2ID := wp.SubmitBatch(b2Tasks)
 
 		waitForCompletion(wp, b1NumTasks+b2NumTasks)
 

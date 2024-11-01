@@ -71,7 +71,7 @@ func (bs BatchStatus) Completed(todo int) bool {
 type BatchID string
 
 type WorkerPool interface {
-	SubmitBatch(tasks []Task) (id BatchID, err error)
+	SubmitBatch(tasks []Task) BatchID
 	GetBatch(id BatchID) (status BatchStatus, ok bool)
 	Results() chan TaskResult
 	Capacity() int
@@ -120,7 +120,7 @@ type workerPool struct {
 
 // SubmitBatch accepts a list of tasks and immediately returns a batch ID. The batch ID can be used to query the status
 // of the batch using [GetBatchStatus].
-func (w *workerPool) SubmitBatch(tasks []Task) (id BatchID, err error) {
+func (w *workerPool) SubmitBatch(tasks []Task) BatchID {
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
 
@@ -137,7 +137,7 @@ func (w *workerPool) SubmitBatch(tasks []Task) (id BatchID, err error) {
 		w.executeBatch(tasks, bID)
 	}()
 
-	return bID, nil
+	return bID
 }
 
 // GetBatch returns the status of a batch previously submitted using [SubmitBatch].
