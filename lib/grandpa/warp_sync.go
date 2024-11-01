@@ -97,6 +97,7 @@ func (w *WarpSyncProof) verify(
 		} else {
 			err := proof.Justification.Verify(uint64(currentSetId), currentAuthorities)
 			if err != nil {
+				logger.Debugf("failed to verify justification %s", err)
 				return nil, err
 			}
 
@@ -163,7 +164,7 @@ func (p *WarpSyncProofProvider) CurrentAuthorities() (primitives.AuthorityList, 
 		}
 
 		authorityList = append(authorityList, primitives.AuthorityIDWeight{
-			AuthorityID:     key,
+			AuthorityID:     primitives.AuthorityID(key),
 			AuthorityWeight: primitives.AuthorityWeight(auth.ID),
 		})
 	}
@@ -332,7 +333,11 @@ func findScheduledChange(
 					return nil, err
 				}
 
-				parsedScheduledChange, _ := scheduledChange.(types.GrandpaScheduledChange)
+				parsedScheduledChange, ok := scheduledChange.(types.GrandpaScheduledChange)
+				if !ok {
+					return nil, nil
+				}
+
 				return &parsedScheduledChange, nil
 			}
 		}
