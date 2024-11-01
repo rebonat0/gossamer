@@ -8,8 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
+
+	"github.com/ChainSafe/gossamer/dot/network"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -331,9 +334,12 @@ func (w *workerPool) handleFailedTask(tr TaskResult, batchID BatchID, batchResul
 
 	if oldTr, ok := w.statuses[batchID].Failed[tID]; ok {
 		// It is only considered a retry if the task was actually executed.
-		if errors.Is(oldTr.Error, ErrNoPeers) {
-			// TODO Should we sleep a bit to wait for peers?
-		} else {
+		if !errors.Is(oldTr.Error, ErrNoPeers) {
+			if errors.Is(oldTr.Error, io.EOF) || errors.Is(oldTr.Error, network.ErrStreamReset) {
+				w.removePeer(oldTr.Who)
+				logger.Debugf("removed peer %s from the worker pool", oldTr.Who)
+			}
+
 			tr.Retries = oldTr.Retries + 1
 			tr.Completed = w.maxRetries != UnlimitedRetries && tr.Retries >= w.maxRetries
 		}
