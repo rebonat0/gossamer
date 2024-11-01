@@ -21,8 +21,8 @@ func WithStrategies(currentStrategy, defaultStrategy Strategy) ServiceConfig {
 		wpCapacity *= 2 // add some buffer
 
 		svc.workerPool = NewWorkerPool(WorkerPoolConfig{
-			MaxRetries: maxTaskRetries,
 			Capacity:   wpCapacity,
+			MaxRetries: UnlimitedRetries,
 		})
 	}
 }

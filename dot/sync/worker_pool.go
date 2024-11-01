@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+const UnlimitedRetries = -1
 const defaultWorkerPoolCapacity = 100
 
 var (
@@ -334,7 +335,7 @@ func (w *workerPool) handleFailedTask(tr TaskResult, batchID BatchID, batchResul
 			// TODO Should we sleep a bit to wait for peers?
 		} else {
 			tr.Retries = oldTr.Retries + 1
-			tr.Completed = tr.Retries >= w.maxRetries
+			tr.Completed = w.maxRetries != UnlimitedRetries && tr.Retries >= w.maxRetries
 		}
 	}
 
