@@ -65,7 +65,7 @@ func (s *syncTask) ID() TaskID {
 }
 
 func (s *syncTask) String() string {
-	return fmt.Sprintf("%s %s", s.id, s.request.String())
+	return fmt.Sprintf("%s %s", s.ID(), s.request.String())
 }
 
 func (s *syncTask) Do(p peer.ID) (Result, error) {
