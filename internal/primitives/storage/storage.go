@@ -3,6 +3,7 @@ package storage
 import (
 	"strings"
 
+	"github.com/ChainSafe/gossamer/pkg/trie"
 	"github.com/tidwall/btree"
 )
 
@@ -55,7 +56,9 @@ type ChildInfo interface {
 	StorageKey() []byte
 	/// Return a the full location in the direct parent of
 	/// this trie.
-	PrefixedStorageKey() []byte
+	PrefixedStorageKey() PrefixedStorageKey
+	/// Returns the type for this child info.
+	ChildType() ChildType
 }
 type ChildInfos interface {
 	ChildInfoParentKeyID
@@ -81,8 +84,14 @@ func (cipkid ChildInfoParentKeyID) StorageKey() []byte {
 
 // / Return a the full location in the direct parent of
 // / this trie.
-func (cipkid ChildInfoParentKeyID) PrefixedStorageKey() []byte {
-	return ChildTrieParentKeyID(cipkid).data
+func (cipkid ChildInfoParentKeyID) PrefixedStorageKey() PrefixedStorageKey {
+	return ChildTypeParentKeyID.NewPrefixedKey(cipkid.data)
+	// return ChildTrieParentKeyID(cipkid).data
+}
+
+// / Returns the type for this child info.
+func (cipkid ChildInfoParentKeyID) ChildType() ChildType {
+	return ChildTypeParentKeyID
 }
 
 // / Instantiates child information for a default child trie
@@ -188,7 +197,7 @@ func (ct ChildType) ParentPrefix() []byte {
 	case ChildTypeParentKeyID:
 		return DefaultChildStorageKeyPrefix
 	default:
-		panic("wtf?")
+		panic("unreachable")
 	}
 }
 
@@ -223,3 +232,14 @@ const (
 	StateVersionV0 StateVersion = iota
 	StateVersionV1
 )
+
+func (svv StateVersion) TrieLayout() trie.TrieLayout {
+	switch svv {
+	case StateVersionV0:
+		return trie.V0
+	case StateVersionV1:
+		return trie.V1
+	default:
+		panic("unreachable")
+	}
+}

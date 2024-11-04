@@ -406,7 +406,7 @@ func TestDeletes(t *testing.T) {
 		"empty_trie": {
 			key: []byte{1},
 			expected: nodeStorage[hash.H256]{
-				nodes: []StoredNode{nil},
+				nodes: []StoredNode{NewStoredNode{Empty{}}},
 			},
 		},
 		"delete_leaf": {
@@ -418,7 +418,7 @@ func TestDeletes(t *testing.T) {
 			},
 			key: []byte{1},
 			expected: nodeStorage[hash.H256]{
-				nodes: []StoredNode{nil},
+				nodes: []StoredNode{NewStoredNode{Empty{}}},
 			},
 		},
 		"delete_branch": {
@@ -435,7 +435,7 @@ func TestDeletes(t *testing.T) {
 			key: []byte{1},
 			expected: nodeStorage[hash.H256]{
 				nodes: []StoredNode{
-					nil,
+					NewStoredNode{Empty{}},
 					NewStoredNode{
 						Leaf[hash.H256]{
 							partialKey: nodeKey{Data: []byte{1, 0}},

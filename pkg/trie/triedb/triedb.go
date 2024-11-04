@@ -227,8 +227,8 @@ func (t *TrieDB[H, Hasher]) getNodeOrLookup(
 		return nil, nil, err
 	}
 
-	if recordAccess {
-		t.recordAccess(EncodedNodeAccess[H]{Hash: t.rootHash, EncodedNode: nodeData})
+	if recordAccess && nodeHash != nil {
+		t.recordAccess(EncodedNodeAccess[H]{Hash: *nodeHash, EncodedNode: nodeData})
 	}
 	return decoded, nodeHash, nil
 }
@@ -282,7 +282,9 @@ func (t *TrieDB[H, Hasher]) insert(keyNibbles nibbles.Nibbles, value []byte) err
 
 // Put inserts the given key / value pair into the trie
 func (t *TrieDB[H, Hasher]) Put(key, value []byte) error {
-	return t.insert(nibbles.NewNibbles(slices.Clone(key)), value)
+	copiedKey := append([]byte{}, key...)
+	copiedValue := append([]byte{}, value...)
+	return t.insert(nibbles.NewNibbles(copiedKey), copiedValue)
 }
 
 // insertAt inserts the given key / value pair into the node referenced by the
@@ -370,7 +372,8 @@ func (t *TrieDB[H, Hasher]) inspect(
 	inspector func(Node, *nibbles.Nibbles) (action, error),
 ) (*inspectResult, error) {
 	// shallow copy since key will change offset through inspector
-	currentKey := *key
+	// currentKey := *key
+	currentKey := key.Clone()
 	switch n := stored.(type) {
 	case NewStoredNode:
 		res, err := inspector(n.node, key)
@@ -809,13 +812,13 @@ func (t *TrieDB[H, Hasher]) replaceOldValue(
 	switch oldv := storedValue.(type) {
 	case valueRef[H]:
 		hash := oldv.getHash()
-		if hash != (*new(H)) {
-			prefixedKey := append(prefix.JoinedBytes(), hash.Bytes()...)
-			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: hash, Prefix: prefix}
-		}
+		prefixedKey := append(prefix.JoinedBytes(), hash.Bytes()...)
+		t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: hash, Prefix: prefix}
+
 	case newValueRef[H]:
 		hash := oldv.getHash()
-		if hash != (*new(H)) {
+		if hash != nil {
+			hash := *hash
 			prefixedKey := append(prefix.JoinedBytes(), hash.Bytes()...)
 			t.deathRow[string(prefixedKey)] = hashPrefix[H]{Hash: hash, Prefix: prefix}
 		}
@@ -1036,7 +1039,7 @@ func cacheChildValues[H hash.Hash](
 				key.Append(*pk)
 			}
 
-			if d := c.data(); d != nil {
+			if d := c.Data(); d != nil {
 				if h := c.dataHash(); h != nil {
 					*valuesToCache = append(*valuesToCache, valueToCache[H]{
 						KeyBytes: key.Inner(),
@@ -1064,7 +1067,7 @@ func (t *TrieDB[H, Hasher]) cacheNode(hash H, encoded []byte, fullKey *nibbles.N
 		if err != nil {
 			return nil, err
 		}
-		return newCachedNodeFromNode[H, Hasher](decoded)
+		return NewCachedNodeFromNode[H, Hasher](decoded)
 	})
 	if err != nil {
 		panic("Just encoded the node, so it should decode without any errors; qed")
@@ -1073,7 +1076,7 @@ func (t *TrieDB[H, Hasher]) cacheNode(hash H, encoded []byte, fullKey *nibbles.N
 	valuesToCache := []valueToCache[H]{}
 	// If the given node has data attached, the fullKey is the full key to this node.
 	if fullKey != nil {
-		if v := node.data(); v != nil {
+		if v := node.Data(); v != nil {
 			if h := node.dataHash(); h != nil {
 				valuesToCache = append(valuesToCache, valueToCache[H]{
 					KeyBytes: fullKey.Inner(),
@@ -1116,7 +1119,7 @@ func (t *TrieDB[H, Hasher]) cacheValue(fullKey []byte, value []byte, hash H) {
 		panic("this should never happen")
 	}
 	if node != nil {
-		val = node.data()
+		val = node.Data()
 	}
 
 	if val != nil {
@@ -1160,9 +1163,9 @@ func (t *TrieDB[H, Hasher]) LookupFirstDescendant(key []byte) (MerkleValue[H], e
 	return lookup.LookupFirstDescendant(key, nibbles.NewNibbles(slices.Clone(key)))
 }
 
-// func (t *TrieDB[H, Hasher]) Iterator() (TrieIterator[H, *TrieItem], error) {
-// 	return NewTrieDBIterator(t)
-// }
+func (t *TrieDB[H, Hasher]) Iterator() (TrieIterator[H, *TrieItem], error) {
+	return NewTrieDBIterator(t)
+}
 
 func (t *TrieDB[H, Hasher]) KeyIterator() (TrieIterator[H, []byte], error) {
 	return NewTrieDBKeyIterator(t)

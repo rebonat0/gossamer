@@ -88,6 +88,10 @@ type LocalTrieCache[H runtime.Hash] struct {
 	stats trieHitStats
 }
 
+func (ltc *LocalTrieCache[H]) Commit() {
+	ltc.commit()
+}
+
 func (ltc *LocalTrieCache[H]) commit() {
 	// tracing::debug!(
 	// 	target: LOG_TARGET,
@@ -148,7 +152,7 @@ func (ltc *LocalTrieCache[H]) commit() {
 // / Return self as a [`TrieDB`](trie_db::TrieDB) compatible cache.
 // /
 // / The given `storage_root` needs to be the storage root of the trie this cache is used for.
-func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache triedb.TrieCache[H], unlock func()) {
+func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache *TrieCache[H], unlock func()) {
 	ltc.valueCacheMtx.Lock()
 	ltc.sharedValueCacheAccessMtx.Lock()
 
@@ -165,6 +169,7 @@ func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache triedb.TrieCache[H
 		ltc.sharedValueCacheAccessMtx.Unlock()
 		ltc.nodeCacheMtx.Unlock()
 	}
+
 	return &TrieCache[H]{
 		sharedCache: ltc.shared,
 		localCache:  ltc.nodeCache,
@@ -180,7 +185,7 @@ func (ltc *LocalTrieCache[H]) TrieCache(storageRoot H) (cache triedb.TrieCache[H
 // / cache instance. If the function is not called, cached data is just thrown away and not
 // / propagated to the shared cache. So, accessing these new items will be slower, but nothing
 // / would break because of this.
-func (ltc *LocalTrieCache[H]) TrieCacheMut() (cache triedb.TrieCache[H], unlock func()) {
+func (ltc *LocalTrieCache[H]) TrieCacheMut() (cache *TrieCache[H], unlock func()) {
 	ltc.nodeCacheMtx.Lock()
 	return &TrieCache[H]{
 		sharedCache: ltc.shared,
@@ -188,6 +193,10 @@ func (ltc *LocalTrieCache[H]) TrieCacheMut() (cache triedb.TrieCache[H], unlock 
 		valueCache:  &freshValueCache[H]{},
 		stats:       ltc.stats,
 	}, ltc.nodeCacheMtx.Unlock
+}
+
+func (ltc *LocalTrieCache[H]) Merge(other *TrieCache[H], newRoot H) {
+	other.MergeInto(ltc, newRoot)
 }
 
 // / A struct to gather hit/miss stats to aid in debugging the performance of the cache.

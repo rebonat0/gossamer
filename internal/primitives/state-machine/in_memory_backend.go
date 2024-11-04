@@ -1,0 +1,105 @@
+package statemachine
+
+import (
+	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
+	"github.com/ChainSafe/gossamer/internal/primitives/storage"
+	"github.com/ChainSafe/gossamer/internal/primitives/trie"
+)
+
+type MemoryDBTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
+	*TrieBackend[H, Hasher]
+}
+
+func NewMemoryDBTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]]() MemoryDBTrieBackend[H, Hasher] {
+	mdb := trie.NewPrefixedMemoryDB[H, Hasher]()
+	root := (*new(Hasher)).Hash([]byte{0})
+	return MemoryDBTrieBackend[H, Hasher]{
+		TrieBackend: NewTrieBackend[H, Hasher](HashDBTrieBackendStorage[H]{mdb}, root, nil, nil),
+	}
+}
+
+type change struct {
+	storage.ChildInfo // can be nil
+	StorageCollection
+}
+
+func (tb *MemoryDBTrieBackend[H, Hasher]) clone() MemoryDBTrieBackend[H, Hasher] {
+	return MemoryDBTrieBackend[H, Hasher]{
+		NewTrieBackend[H, Hasher](tb.essence.BackendStorage(), tb.essence.root, nil, nil),
+	}
+}
+
+// / Copy the state, with applied updates
+func (tb *MemoryDBTrieBackend[H, Hasher]) update(changes []change, stateVersion storage.StateVersion) MemoryDBTrieBackend[H, Hasher] {
+	clone := tb.clone()
+	clone.insert(changes, stateVersion)
+	return clone
+}
+
+// / Insert values into backend trie.
+func (tb *MemoryDBTrieBackend[H, Hasher]) insert(changes []change, stateVersion storage.StateVersion) {
+	top := make([]change, 0)
+	child := make([]change, 0)
+	for _, change := range changes {
+		if change.ChildInfo == nil {
+			top = append(top, change)
+		} else {
+			child = append(child, change)
+		}
+	}
+	var deltas []struct {
+		Key   []byte
+		Value []byte
+	}
+	for _, change := range top {
+		for _, skv := range change.StorageCollection {
+			deltas = append(deltas, struct {
+				Key   []byte
+				Value []byte
+			}{skv.StorageKey, skv.StorageValue})
+		}
+	}
+
+	var childDeltas []struct {
+		storage.ChildInfo
+		Delta []struct {
+			Key   []byte
+			Value []byte
+		}
+	}
+	for _, change := range child {
+		var delta []struct {
+			Key   []byte
+			Value []byte
+		}
+		for _, skv := range change.StorageCollection {
+			delta = append(delta, struct {
+				Key   []byte
+				Value []byte
+			}{skv.StorageKey, skv.StorageValue})
+		}
+		childDeltas = append(childDeltas, struct {
+			storage.ChildInfo
+			Delta []struct {
+				Key   []byte
+				Value []byte
+			}
+		}{
+			ChildInfo: change.ChildInfo,
+			Delta:     delta,
+		})
+	}
+	root, tx := tb.FullStorageRoot(deltas, childDeltas, stateVersion)
+
+	tb.applyTransaction(root, tx)
+}
+
+// / Apply the given transaction to this backend and set the root to the given value.
+func (tb *MemoryDBTrieBackend[H, Hasher]) applyTransaction(root H, transaction BackendTransaction[H, Hasher]) {
+	hdbtbs := tb.essence.storage.(HashDBTrieBackendStorage[H])
+	storage := hdbtbs.HashDB.(*trie.PrefixedMemoryDB[H, Hasher])
+
+	storage.Consolidate(&transaction.MemoryDB)
+	new := NewTrieBackend[H, Hasher](hdbtbs, root, nil, nil)
+	tb.TrieBackend = new
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
 	"github.com/ChainSafe/gossamer/internal/primitives/storage"
 	"github.com/ChainSafe/gossamer/internal/primitives/trie"
+	"github.com/ChainSafe/gossamer/internal/primitives/trie/cache"
 	"github.com/ChainSafe/gossamer/internal/primitives/trie/recorder"
 	ptrie "github.com/ChainSafe/gossamer/pkg/trie"
 	triedb "github.com/ChainSafe/gossamer/pkg/trie/triedb"
@@ -27,7 +28,7 @@ const (
 // / A raw iterator over the storage.
 type RawIter[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
 	stopOnImcompleteDatabase bool
-	skipIfFirst              *StorageKey
+	skipIfFirst              StorageKey
 	root                     H
 	childInfo                storage.ChildInfo
 	trieIter                 triedb.TrieDBRawIterator[H, Hasher]
@@ -37,7 +38,7 @@ type RawIter[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
 func prepare[H runtime.Hash, Hasher runtime.Hasher[H], R any](
 	ri *RawIter[H, Hasher],
 	backend *TrieBackendEssence[H, Hasher],
-	callback func(*triedb.TrieDB[H, Hasher], triedb.TrieDBRawIterator[H, Hasher]) (*R, error),
+	callback func(*triedb.TrieDB[H, Hasher], *triedb.TrieDBRawIterator[H, Hasher]) (*R, error),
 ) (*R, error) {
 	if ri.state != Pending {
 		return nil, nil
@@ -46,7 +47,7 @@ func prepare[H runtime.Hash, Hasher runtime.Hasher[H], R any](
 	var result *R
 	var err error
 	withTrieDB[H, Hasher](backend, ri.root, ri.childInfo, func(db *triedb.TrieDB[H, Hasher]) {
-		result, err = callback(db, ri.trieIter)
+		result, err = callback(db, &ri.trieIter)
 	})
 	if err != nil {
 		ri.state = FinishedIncomplete
@@ -72,15 +73,15 @@ func (ri *RawIter[H, Hasher]) NextKey(backend *TrieBackend[H, Hasher]) (StorageK
 
 	key, err := prepare[H, Hasher, []byte](
 		ri,
-		&backend.Essence,
-		func(trie *triedb.TrieDB[H, Hasher], trieIter triedb.TrieDBRawIterator[H, Hasher]) (*[]byte, error) {
+		&backend.essence,
+		func(trie *triedb.TrieDB[H, Hasher], trieIter *triedb.TrieDBRawIterator[H, Hasher]) (*[]byte, error) {
 			result, err := trieIter.NextKey()
 			if err != nil {
 				return nil, err
 			}
 			if skipIfFirst != nil {
 				if result != nil {
-					if slices.Equal(result, *skipIfFirst) {
+					if slices.Equal(result, skipIfFirst) {
 						result, err = trieIter.NextKey()
 						if err != nil {
 							return nil, err
@@ -105,15 +106,15 @@ func (ri *RawIter[H, Hasher]) NextKeyValue(backend *TrieBackend[H, Hasher]) (*St
 
 	pair, err := prepare[H, Hasher, StorageKeyValue](
 		ri,
-		&backend.Essence,
-		func(trie *triedb.TrieDB[H, Hasher], trieIter triedb.TrieDBRawIterator[H, Hasher]) (*StorageKeyValue, error) {
+		&backend.essence,
+		func(trie *triedb.TrieDB[H, Hasher], trieIter *triedb.TrieDBRawIterator[H, Hasher]) (*StorageKeyValue, error) {
 			result, err := trieIter.NextItem()
 			if err != nil {
 				return nil, err
 			}
 			if skipIfFirst != nil {
 				if result != nil {
-					if bytes.Equal(result.Key, *skipIfFirst) {
+					if bytes.Equal(result.Key, skipIfFirst) {
 						result, err = trieIter.NextItem()
 						if err != nil {
 							return nil, err
@@ -121,7 +122,10 @@ func (ri *RawIter[H, Hasher]) NextKeyValue(backend *TrieBackend[H, Hasher]) (*St
 					}
 				}
 			}
-			return &StorageKeyValue{result.Key, result.Value}, nil
+			if result != nil {
+				return &StorageKeyValue{result.Key, result.Value}, nil
+			}
+			return nil, nil
 		})
 	return pair, err
 }
@@ -141,7 +145,7 @@ type TrieBackendEssence[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
 		sync.RWMutex
 	}
 	// pub(crate) trie_node_cache: Option<C>,
-	trieNodeCache TrieCacheProvider[H]
+	trieNodeCache TrieCacheProvider[H, *cache.TrieCache[H]]
 	// #[cfg(feature = "std")]
 	// pub(crate) recorder: Option<Recorder<H>>,
 	recorder *recorder.Recorder[H]
@@ -150,7 +154,7 @@ type TrieBackendEssence[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
 func newTrieBackendEssence[H runtime.Hash, Hasher runtime.Hasher[H]](
 	storage TrieBackendStorage[H],
 	root H,
-	cache TrieCacheProvider[H],
+	cache TrieCacheProvider[H, *cache.TrieCache[H]],
 	recorder *recorder.Recorder[H],
 ) TrieBackendEssence[H, Hasher] {
 	return TrieBackendEssence[H, Hasher]{
@@ -210,8 +214,9 @@ func withRecorderAndCache[H runtime.Hash, Hasher runtime.Hasher[H]](
 	}
 
 	var cache triedb.TrieCache[H]
+	var unlock func()
 	if tbe.trieNodeCache != nil {
-		cache = tbe.trieNodeCache.TrieCache(root)
+		cache, unlock = tbe.trieNodeCache.TrieCache(root)
 	}
 
 	var recorder triedb.TrieRecorder
@@ -219,6 +224,9 @@ func withRecorderAndCache[H runtime.Hash, Hasher runtime.Hasher[H]](
 		recorder = tbe.recorder.TrieRecorder(root)
 	}
 	callback(recorder, cache)
+	if unlock != nil {
+		unlock()
+	}
 }
 
 // / Call the given closure passing it the recorder and the cache.
@@ -244,11 +252,12 @@ func withRecorderAndCacheForStorageRoot[H runtime.Hash, Hasher runtime.Hasher[H]
 	}
 
 	if tbe.trieNodeCache != nil {
-		cache := tbe.trieNodeCache.NewTrieCache()
+		cache, unlock := tbe.trieNodeCache.TrieCacheMut()
 		newRoot, r := callback(recorder, cache)
 		if newRoot != nil {
 			tbe.trieNodeCache.Merge(cache, *newRoot)
 		}
+		unlock()
 		return r
 	} else {
 		_, r := callback(recorder, nil)
@@ -304,6 +313,64 @@ func (tbe *TrieBackendEssence[H, Hasher]) childRoot(childInfo storage.ChildInfo)
 	return result, nil
 }
 
+// / Return the next key in the child trie i.e. the minimum key that is strictly superior to
+// / `key` in lexicographic order.
+func (tbe *TrieBackendEssence[H, Hasher]) NextChildStorageKey(childInfo storage.ChildInfo, key []byte) (StorageKey, error) {
+	childRoot, err := tbe.childRoot(childInfo)
+	if err != nil {
+		return nil, err
+	}
+	if childRoot == nil {
+		return nil, nil
+	}
+
+	return tbe.NextStorageKeyFromRoot(*childRoot, childInfo, key)
+}
+
+func (tbe *TrieBackendEssence[H, Hasher]) NextStorageKeyFromRoot(root H, childInfo storage.ChildInfo, key []byte) (StorageKey, error) {
+	var err error
+	var nextKey []byte
+	withTrieDB(tbe, root, childInfo, func(trie *triedb.TrieDB[H, Hasher]) {
+		var iter triedb.TrieIterator[H, []byte]
+		iter, err = trie.KeyIterator()
+		if err != nil {
+			return
+		}
+
+		// The key just after the one given in input, basically `key++0`.
+		// Note: We are sure this is the next key if:
+		// * size of key has no limit (i.e. we can always add 0 to the path),
+		// * and no keys can be inserted between `key` and `key++0` (this is ensured by sp-io).
+		potentialNextKey := key
+		potentialNextKey = append(potentialNextKey, 0)
+
+		err = iter.Seek(potentialNextKey)
+		if err != nil {
+			return
+		}
+
+		var nextElement []byte
+		nextElement, err = iter.Next()
+		if err != nil {
+			return
+		}
+		nextKey = nextElement
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return nextKey, err
+}
+
+// / Get the value of storage at given key.
+func (tbe *TrieBackendEssence[H, Hasher]) Storage(key []byte) (val StorageValue, err error) {
+	withRecorderAndCache(tbe, nil, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) {
+		val, err = trie.ReadTrieValue[H, Hasher](tbe, tbe.root, key, recorder, cache, triedb.V1)
+	})
+	return
+}
+
 // / Returns the hash value
 func (tbe *TrieBackendEssence[H, Hasher]) StorageHash(key []byte) (hash *H, err error) {
 	withRecorderAndCache[H, Hasher](tbe, nil, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) {
@@ -314,33 +381,88 @@ func (tbe *TrieBackendEssence[H, Hasher]) StorageHash(key []byte) (hash *H, err 
 	return
 }
 
-// / Get the value of storage at given key.
-func (tbe *TrieBackendEssence[H, Hasher]) Storage(key []byte) (val StorageValue, err error) {
-	withRecorderAndCache(tbe, nil, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) {
-		val, err = trie.ReadTrieValue[H, Hasher](tbe, tbe.root, key, recorder, cache)
+// / Get the value of child storage at given key.
+func (tbe *TrieBackendEssence[H, Hasher]) ChildStorage(childInfo storage.ChildInfo, key []byte) (StorageValue, error) {
+	var childRoot H
+	root, err := tbe.childRoot(childInfo)
+	if err != nil {
+		return nil, err
+	}
+	if root == nil {
+		return nil, nil
+	}
+	childRoot = *root
+
+	var val StorageValue
+	withRecorderAndCache(tbe, &childRoot, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) {
+		val, err = trie.ReadChildTrieValue[H, Hasher](
+			childInfo.Keyspace(),
+			tbe,
+			childRoot,
+			key,
+			recorder,
+			cache,
+			triedb.V1,
+		)
 	})
-	return
+	return val, err
+}
+
+// / Returns the hash value
+func (tbe *TrieBackendEssence[H, Hasher]) ChildStorageHash(childInfo storage.ChildInfo, key []byte) (*H, error) {
+	var childRoot H
+	root, err := tbe.childRoot(childInfo)
+	if err != nil {
+		return nil, err
+	}
+	if root == nil {
+		return nil, nil
+	}
+	childRoot = *root
+
+	var hash *H
+	withRecorderAndCache(tbe, &childRoot, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) {
+		hash, err = trie.ReadChildTrieHash[H, Hasher](
+			childInfo.Keyspace(),
+			tbe,
+			childRoot,
+			key,
+			recorder,
+			cache,
+			triedb.V1,
+		)
+	})
+	return hash, err
+}
+
+// / Get the closest merkle value at given key.
+func (tbe *TrieBackendEssence[H, Hasher]) ClosestMerkleValue(key []byte) (triedb.MerkleValue[H], error) {
+	panic("unimpl")
+}
+
+func (tbe *TrieBackendEssence[H, Hasher]) ChildClosestMerkleValue(childInfo storage.ChildInfo, key []byte) (triedb.MerkleValue[H], error) {
+	panic("unimpl")
 }
 
 // / Create a raw iterator over the storage.
-func (tbe *TrieBackendEssence[H, Hasher]) RawIter(args IterArgs) (RawIter[H, Hasher], error) {
-	var root H
+func (tbe *TrieBackendEssence[H, Hasher]) RawIter(args IterArgs) (*RawIter[H, Hasher], error) {
+	var root H = tbe.root
 	if args.ChildInfo != nil {
 		childRoot, err := tbe.childRoot(args.ChildInfo)
 		if err != nil {
-			return RawIter[H, Hasher]{}, err
+			return &RawIter[H, Hasher]{}, err
 		}
 		if childRoot != nil {
 			root = *childRoot
 		} else {
-			return RawIter[H, Hasher]{
+			return &RawIter[H, Hasher]{
 				state: FinishedComplete,
 			}, nil
 		}
 	}
 
 	if root == (*new(H)) {
-		return RawIter[H, Hasher]{
+		return &RawIter[H, Hasher]{
 			state: FinishedComplete,
 		}, nil
 	}
@@ -350,28 +472,28 @@ func (tbe *TrieBackendEssence[H, Hasher]) RawIter(args IterArgs) (RawIter[H, Has
 	withTrieDB[H, Hasher](tbe, root, args.ChildInfo, func(db *triedb.TrieDB[H, Hasher]) {
 		var prefix []byte
 		if args.Prefix != nil {
-			prefix = *args.Prefix
+			prefix = args.Prefix
 		}
 
 		if args.StartAt != nil {
-			trieIter, err = triedb.NewPrefixedTrieDBRawIteratorThenSeek[H, Hasher](db, prefix, *args.StartAt)
+			trieIter, err = triedb.NewPrefixedTrieDBRawIteratorThenSeek[H, Hasher](db, prefix, args.StartAt)
 		} else {
 			trieIter, err = triedb.NewPrefixedTrieDBRawIterator[H, Hasher](db, prefix)
 		}
 	})
 	if err != nil {
-		return RawIter[H, Hasher]{}, err
+		return &RawIter[H, Hasher]{}, err
 	}
 
-	var skipIfFirst *StorageKey
+	var skipIfFirst StorageKey
 	if args.StartAtExclusive {
 		if args.StartAt != nil {
-			storageKey := StorageKey(*args.StartAt)
-			skipIfFirst = &storageKey
+			storageKey := StorageKey(args.StartAt)
+			skipIfFirst = storageKey
 		}
 	}
 
-	return RawIter[H, Hasher]{
+	return &RawIter[H, Hasher]{
 		stopOnImcompleteDatabase: args.StopOnIncompleteDatabase,
 		skipIfFirst:              skipIfFirst,
 		childInfo:                args.ChildInfo,
@@ -381,6 +503,7 @@ func (tbe *TrieBackendEssence[H, Hasher]) RawIter(args IterArgs) (RawIter[H, Has
 	}, nil
 }
 
+// / Return the storage root after applying the given `delta`.
 func (tbe *TrieBackendEssence[H, Hasher]) StorageRoot(delta []struct {
 	Key   []byte
 	Value []byte
@@ -389,7 +512,7 @@ func (tbe *TrieBackendEssence[H, Hasher]) StorageRoot(delta []struct {
 
 	root := withRecorderAndCacheForStorageRoot[H, Hasher, H](tbe, nil, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) (*H, H) {
 		eph := newEphemeral[H, Hasher](tbe.BackendStorage(), writeOverlay)
-		root, err := trie.DeltaTrieRoot[H, Hasher](eph, tbe.root, delta, recorder, cache, stateVersion)
+		root, err := trie.DeltaTrieRoot[H, Hasher](eph, tbe.root, delta, recorder, cache, stateVersion.TrieLayout())
 		if err != nil {
 			log.Printf("WARN: failed to write to trie: %v", err)
 			return nil, tbe.root
@@ -398,6 +521,41 @@ func (tbe *TrieBackendEssence[H, Hasher]) StorageRoot(delta []struct {
 	})
 
 	return root, writeOverlay
+}
+
+func (tbe *TrieBackendEssence[H, Hasher]) ChildStorageRoot(
+	childInfo storage.ChildInfo,
+	delta []struct {
+		Key   []byte
+		Value []byte
+	},
+	stateVersion storage.StateVersion,
+) (H, bool, *trie.PrefixedMemoryDB[H, Hasher]) {
+	defaultRoot := trie.EmptyChildTrieRoot[H, Hasher]()
+	writeOverlay := trie.NewPrefixedMemoryDB[H, Hasher]()
+	var childRoot H
+	hash, err := tbe.childRoot(childInfo)
+	if err != nil {
+		log.Printf("WARN: Failed to read child storage root: %v", childInfo)
+	}
+	if hash == nil {
+		childRoot = defaultRoot
+	} else {
+		childRoot = *hash
+	}
+
+	newChildRoot := withRecorderAndCacheForStorageRoot[H, Hasher](tbe, &childRoot, func(recorder triedb.TrieRecorder, cache triedb.TrieCache[H]) (*H, H) {
+		eph := newEphemeral[H, Hasher](tbe.BackendStorage(), writeOverlay)
+		root, err := trie.ChildDeltaTrieRoot[H, Hasher](childInfo.Keyspace(), eph, childRoot, delta, recorder, cache, stateVersion.TrieLayout())
+		if err != nil {
+			log.Printf("WARN: Failed to write to trie: %v", err)
+			return nil, childRoot
+		}
+		return &root, root
+	})
+
+	isDefault := newChildRoot == defaultRoot
+	return newChildRoot, isDefault, writeOverlay
 }
 
 func (tbe *TrieBackendEssence[H, Hasher]) Get(key H, prefix hashdb.Prefix) []byte {
@@ -475,4 +633,12 @@ func (e *ephemeral[H, Hasher]) Remove(key H, prefix hashdb.Prefix) {
 // / Key-value pairs storage that is used by trie backend essence.
 type TrieBackendStorage[H constraints.Ordered] interface {
 	Get(key H, prefix hashdb.Prefix) ([]byte, error)
+}
+
+type HashDBTrieBackendStorage[H runtime.Hash] struct {
+	hashdb.HashDB[H]
+}
+
+func (hdbtbs HashDBTrieBackendStorage[H]) Get(key H, prefix hashdb.Prefix) ([]byte, error) {
+	return hdbtbs.HashDB.Get(key, prefix), nil
 }

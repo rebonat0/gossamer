@@ -89,7 +89,7 @@ func (l *TrieLookup[H, Hasher, QueryItem]) LookupFirstDescendant(fullKey []byte,
 				return nil, err
 			}
 
-			owned, err := newCachedNodeFromNode[H, Hasher](decoded)
+			owned, err := NewCachedNodeFromNode[H, Hasher](decoded)
 			if err != nil {
 				return nil, err
 			}
@@ -376,7 +376,7 @@ func lookupWithCacheInternal[H hash.Hash, Hasher hash.Hasher[H], R, QueryItem an
 				return nil, err
 			}
 
-			return newCachedNodeFromNode[H, Hasher](decoded)
+			return NewCachedNodeFromNode[H, Hasher](decoded)
 		})
 		if err != nil {
 			return nil, err

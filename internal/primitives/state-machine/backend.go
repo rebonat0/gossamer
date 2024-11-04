@@ -1,11 +1,12 @@
 package statemachine
 
 import (
-	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
+	"iter"
+
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
-	"github.com/ChainSafe/gossamer/internal/primitives/state-machine/stats"
 	"github.com/ChainSafe/gossamer/internal/primitives/storage"
 	"github.com/ChainSafe/gossamer/internal/primitives/trie"
+	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
 )
 
 // // / Trait that allows consolidate two transactions together.
@@ -94,12 +95,12 @@ import (
 type IterArgs struct {
 	/// The prefix of the keys over which to iterate.
 	// 	pub prefix: Option<&'a [u8]>,
-	Prefix *[]byte
+	Prefix []byte
 
 	/// The prefix from which to start the iteration from.
 	///
 	/// This is inclusive and the iteration will include the key which is specified here.
-	StartAt *[]byte
+	StartAt []byte
 
 	/// If this is `true` then the iteration will *not* include
 	/// the key specified in `start_at`, if there is such a key.
@@ -152,10 +153,31 @@ type StorageIterator[Hash runtime.Hash, Hasher runtime.Hasher[Hash]] interface {
 //		raw_iter: I,
 //		_phantom: PhantomData<H>,
 //	}
-// type PairsIter[H HasherOut, T Transaction] struct {
-// 	backend *Backend[H, T]
-// 	rawIter StorageIterator[H, T]
-// }
+type PairsIter[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
+	backend *TrieBackend[H, Hasher]
+	rawIter StorageIterator[H, Hasher]
+}
+
+func (pi *PairsIter[H, Hasher]) Next() (*StorageKeyValue, error) {
+	return pi.rawIter.NextKeyValue(pi.backend)
+}
+
+func (pi *PairsIter[H, Hasher]) All() iter.Seq2[StorageKeyValue, error] {
+	return func(yield func(StorageKeyValue, error) bool) {
+		for {
+			item, err := pi.Next()
+			if err != nil {
+				return
+			}
+			if item == nil {
+				return
+			}
+			if !yield(*item, err) {
+				return
+			}
+		}
+	}
+}
 
 // / An iterator over storage keys.
 // pub struct KeysIter<'a, H, I>
@@ -169,29 +191,68 @@ type StorageIterator[Hash runtime.Hash, Hasher runtime.Hasher[Hash]] interface {
 //		raw_iter: I,
 //		_phantom: PhantomData<H>,
 //	}
-// type KeysIter[H HasherOut, T Transaction] struct {
-// 	backend *Backend[H, T]
-// 	rawIter StorageIterator[H, T]
-// }
+type KeysIter[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
+	backend *TrieBackend[H, Hasher]
+	rawIter StorageIterator[H, Hasher]
+}
+
+func (ki *KeysIter[H, Hasher]) Next() (StorageKey, error) {
+	return ki.rawIter.NextKey(ki.backend)
+}
+
+func (ki *KeysIter[H, Hasher]) All() iter.Seq2[StorageKey, error] {
+	return func(yield func(StorageKey, error) bool) {
+		for {
+			item, err := ki.Next()
+			if err != nil {
+				return
+			}
+			if item == nil {
+				return
+			}
+			if !yield(item, err) {
+				return
+			}
+		}
+	}
+}
 
 // / The transaction type used by [`Backend`].
 // /
 // / This transaction contains all the changes that need to be applied to the backend to create the
 // / state for a new block.
-type BackendTransaction[Hash runtime.Hash, Hasher hashdb.Hasher[Hash]] trie.PrefixedMemoryDB[Hash, Hasher]
+type BackendTransaction[Hash runtime.Hash, Hasher runtime.Hasher[Hash]] struct {
+	*trie.PrefixedMemoryDB[Hash, Hasher]
+}
+
+func NewBackendTransaction[Hash runtime.Hash, Hasher runtime.Hasher[Hash]]() BackendTransaction[Hash, Hasher] {
+	return BackendTransaction[Hash, Hasher]{trie.NewPrefixedMemoryDB[Hash, Hasher]()}
+}
 
 // / A state backend is used to read state data and can have changes committed
 // / to it.
 // /
 // / The clone operation (if implemented) should be cheap.
-type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
+type Backend[Hash runtime.Hash, H runtime.Hasher[Hash]] interface {
 	/// Get keyed storage or None if there is nothing associated.
 	// fn storage(&self, key: &[u8]) -> Result<Option<StorageValue>, Self::Error>;
-	Storage(key []byte) (*StorageValue, error)
+	Storage(key []byte) (StorageValue, error)
 
 	/// Get keyed storage value hash or None if there is nothing associated.
 	// fn storage_hash(&self, key: &[u8]) -> Result<Option<H::Out>, Self::Error>;
 	StorageHash(key []byte) (*Hash, error)
+
+	/// Get the merkle value or None if there is nothing associated.
+	// fn closest_merkle_value(&self, key: &[u8]) -> Result<Option<MerkleValue<H::Out>>, Self::Error>;
+	ClosestMerkleValue(key []byte) (triedb.MerkleValue[Hash], error)
+
+	/// Get the child merkle value or None if there is nothing associated.
+	// fn child_closest_merkle_value(
+	// 	&self,
+	// 	child_info: &ChildInfo,
+	// 	key: &[u8],
+	// ) -> Result<Option<MerkleValue<H::Out>>, Self::Error>;
+	ChildClosestMerkleValue(childInfo storage.ChildInfo, key []byte) (triedb.MerkleValue[Hash], error)
 
 	/// Get keyed child storage or None if there is nothing associated.
 	// fn child_storage(
@@ -199,7 +260,7 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 	// 	child_info: &ChildInfo,
 	// 	key: &[u8],
 	// ) -> Result<Option<StorageValue>, Self::Error>;
-	ChildStorage(childInfo storage.ChildInfo, key []byte) (*StorageValue, error)
+	ChildStorage(childInfo storage.ChildInfo, key []byte) (StorageValue, error)
 
 	/// Get child keyed storage value hash or None if there is nothing associated.
 	// fn child_storage_hash(
@@ -227,7 +288,7 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 
 	/// Return the next key in storage in lexicographic order or `None` if there is no value.
 	// fn next_storage_key(&self, key: &[u8]) -> Result<Option<StorageKey>, Self::Error>;
-	NextStorageKey(key []byte) (*StorageKey, error)
+	NextStorageKey(key []byte) (StorageKey, error)
 
 	/// Return the next key in child storage in lexicographic order or `None` if there is no value.
 	// fn next_child_storage_key(
@@ -235,7 +296,7 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 	// 	child_info: &ChildInfo,
 	// 	key: &[u8],
 	// ) -> Result<Option<StorageKey>, Self::Error>;
-	NextChildStorageKey(childInfo storage.ChildInfo, key []byte) (*StorageKey, error)
+	NextChildStorageKey(childInfo storage.ChildInfo, key []byte) (StorageKey, error)
 
 	/// Calculate the storage root, with given delta over what is already stored in
 	/// the backend, and produce a "transaction" that can be used to commit.
@@ -266,13 +327,13 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 	ChildStorageRoot(childInfo storage.ChildInfo, delta []struct {
 		Key   []byte
 		Value []byte
-	}, stateVersion storage.StateVersion) (H, bool, BackendTransaction[Hash, H])
+	}, stateVersion storage.StateVersion) (Hash, bool, BackendTransaction[Hash, H])
 
-	// /// Returns a lifetimeless raw storage iterator.
+	/// Returns a lifetimeless raw storage iterator.
 	// fn raw_iter(&self, args: IterArgs) -> Result<Self::RawIter, Self::Error>;
-	// RawIter(args IterArgs) (StorageIterator[H, T], error)
+	RawIter(args IterArgs) (StorageIterator[Hash, H], error)
 
-	// /// Get an iterator over key/value pairs.
+	/// Get an iterator over key/value pairs.
 	// fn pairs<'a>(&'a self, args: IterArgs) -> Result<PairsIter<'a, H, Self::RawIter>, Self::Error> {
 	// 	Ok(PairsIter {
 	// 		backend: Some(self),
@@ -280,9 +341,9 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 	// 		_phantom: Default::default(),
 	// 	})
 	// }
-	// Pairs(args IterArgs) (PairsIter[H, T], error)
+	Pairs(args IterArgs) (PairsIter[Hash, H], error)
 
-	// /// Get an iterator over keys.
+	/// Get an iterator over keys.
 	// fn keys<'a>(&'a self, args: IterArgs) -> Result<KeysIter<'a, H, Self::RawIter>, Self::Error> {
 	// 	Ok(KeysIter {
 	// 		backend: Some(self),
@@ -290,11 +351,11 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 	// 		_phantom: Default::default(),
 	// 	})
 	// }
-	// Keys(args IterArgs) (KeysIter[H, T], error)
+	Keys(args IterArgs) (KeysIter[Hash, H], error)
 
-	// /// Calculate the storage root, with given delta over what is already stored
-	// /// in the backend, and produce a "transaction" that can be used to commit.
-	// /// Does include child storage updates.
+	/// Calculate the storage root, with given delta over what is already stored
+	/// in the backend, and produce a "transaction" that can be used to commit.
+	/// Does include child storage updates.
 	// fn full_storage_root<'a>(
 	// 	&self,
 	// 	delta: impl Iterator<Item = (&'a [u8], Option<&'a [u8]>)>,
@@ -305,84 +366,90 @@ type Backend[Hash runtime.Hash, H hashdb.Hasher[Hash]] interface {
 	// ) -> (H::Out, Self::Transaction)
 	// where
 	// 	H::Out: Ord + Encode,
-	FullStorageRoot(delta []struct {
-		Key   []byte
-		Value []byte
-	}, childDeltas []struct {
-		storage.ChildInfo
-		Values []struct {
+	FullStorageRoot(
+		delta []struct {
 			Key   []byte
 			Value []byte
-		}
-	}, stateVersion storage.StateVersion) (H, BackendTransaction[Hash, H])
+		},
+		childDeltas []struct {
+			storage.ChildInfo
+			Delta []struct {
+				Key   []byte
+				Value []byte
+			}
+		},
+		stateVersion storage.StateVersion,
+	) (Hash, BackendTransaction[Hash, H])
 
 	/// Register stats from overlay of state machine.
 	///
 	/// By default nothing is registered.
 	// fn register_overlay_stats(&self, _stats: &crate::stats::StateMachineStats);
-	RegisterOverlayStats(stats stats.StateMachineStats)
+	// RegisterOverlayStats(stats stats.StateMachineStats)
 
 	/// Query backend usage statistics (i/o, memory)
 	///
 	/// Not all implementations are expected to be able to do this. In the
 	/// case when they don't, empty statistics is returned.
 	// fn usage_info(&self) -> UsageInfo;
-	UsageInfo() stats.UsageInfo
+	// UsageInfo() stats.UsageInfo
 
-	/// Wipe the state database.
-	// fn wipe(&self) -> Result<(), Self::Error> {
-	// 	unimplemented!()
-	// }
-	Wipe() error
+	// Note: Everything below is unimplemented and only used in benchmarking in substrate
+	// /// Wipe the state database.
+	// // fn wipe(&self) -> Result<(), Self::Error> {
+	// // 	unimplemented!()
+	// // }
+	// Wipe() error
 
-	/// Commit given transaction to storage.
-	// fn commit(
-	// 	&self,
-	// 	_: H::Out,
-	// 	_: Self::Transaction,
-	// 	_: StorageCollection,
-	// 	_: ChildStorageCollection,
-	// ) -> Result<(), Self::Error> {
-	// 	unimplemented!()
-	// }
-	Commit(H, BackendTransaction[Hash, H], StorageCollection, ChildStorageCollection) error
-
-	/// Get the read/write count of the db
-	// fn read_write_count(&self) -> (u32, u32, u32, u32) {
-	// 	unimplemented!()
-	// }
-	ReadWriteCount() (uint32, uint32, uint32, uint32)
+	// /// Commit given transaction to storage.
+	// // fn commit(
+	// // 	&self,
+	// // 	_: H::Out,
+	// // 	_: Self::Transaction,
+	// // 	_: StorageCollection,
+	// // 	_: ChildStorageCollection,
+	// // ) -> Result<(), Self::Error> {
+	// // 	unimplemented!()
+	// // }
+	// Commit(H, BackendTransaction[Hash, H], StorageCollection, ChildStorageCollection) error
 
 	// /// Get the read/write count of the db
-	// fn reset_read_write_count(&self) {
-	// 	unimplemented!()
-	// }
-	ResetReadWriteCount()
+	// // fn read_write_count(&self) -> (u32, u32, u32, u32) {
+	// // 	unimplemented!()
+	// // }
+	// ReadWriteCount() (uint32, uint32, uint32, uint32)
 
-	// /// Get the whitelist for tracking db reads/writes
-	// fn get_whitelist(&self) -> Vec<TrackedStorageKey> {
-	// 	Default::default()
-	// }
-	GetWhitelist() []storage.TrackedStorageKey
+	// // /// Get the read/write count of the db
+	// // fn reset_read_write_count(&self) {
+	// // 	unimplemented!()
+	// // }
+	// ResetReadWriteCount()
 
-	// /// Update the whitelist for tracking db reads/writes
-	// fn set_whitelist(&self, _: Vec<TrackedStorageKey>) {}
-	SetWhitelist([]storage.TrackedStorageKey)
+	// // /// Get the whitelist for tracking db reads/writes
+	// // fn get_whitelist(&self) -> Vec<TrackedStorageKey> {
+	// // 	Default::default()
+	// // }
+	// GetWhitelist() []storage.TrackedStorageKey
 
-	// /// Estimate proof size
-	// fn proof_size(&self) -> Option<u32> {
-	// 	unimplemented!()
-	// }
-	ProofSize() *uint32
+	// // /// Update the whitelist for tracking db reads/writes
+	// // fn set_whitelist(&self, _: Vec<TrackedStorageKey>) {}
+	// SetWhitelist([]storage.TrackedStorageKey)
 
-	// /// Extend storage info for benchmarking db
-	// fn get_read_and_written_keys(&self) -> Vec<(Vec<u8>, u32, u32, bool)> {
-	// 	unimplemented!()
+	// // /// Estimate proof size
+	// // fn proof_size(&self) -> Option<u32> {
+	// // 	unimplemented!()
+	// // }
+	// ProofSize() *uint32
+
+	// // /// Extend storage info for benchmarking db
+	// // fn get_read_and_written_keys(&self) -> Vec<(Vec<u8>, u32, u32, bool)> {
+	// // 	unimplemented!()
+	// // }
+	// GetReadAndWrittenKeys() []struct {
+	// 	Key         []byte
+	// 	Read        uint32
+	// 	Write       uint32
+	// 	Whitelisted bool
 	// }
-	GetReadAndWrittenKeys() []struct {
-		Key         []byte
-		Read        uint32
-		Write       uint32
-		Whitelisted bool
-	}
+
 }

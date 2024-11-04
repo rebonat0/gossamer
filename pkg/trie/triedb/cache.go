@@ -107,7 +107,7 @@ func newCachedNodeHandleFromMerkleValue[H hash.Hash, Hasher hash.Hasher[H]](
 		if err != nil {
 			return nil, err
 		}
-		cachedNode, err := newCachedNodeFromNode[H, Hasher](node)
+		cachedNode, err := NewCachedNodeFromNode[H, Hasher](node)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +130,7 @@ type CachedNodeTypes[H hash.Hash] interface {
 
 // Cached nodes.
 type CachedNode[H hash.Hash] interface {
-	data() []byte // nil means there is no data
+	Data() []byte // nil means there is no data
 	dataHash() *H
 	children() []child[H]
 	partialKey() *nibbles.NibbleSlice
@@ -163,15 +163,15 @@ type (
 	}
 )
 
-func (EmptyCachedNode[H]) data() []byte   { return nil }             //nolint:unused
-func (no LeafCachedNode[H]) data() []byte { return no.Value.data() } //nolint:unused
-func (no BranchCachedNode[H]) data() []byte { //nolint:unused
+func (EmptyCachedNode[H]) Data() []byte   { return nil }             //nolint:unused
+func (no LeafCachedNode[H]) Data() []byte { return no.Value.data() } //nolint:unused
+func (no BranchCachedNode[H]) Data() []byte { //nolint:unused
 	if no.Value != nil {
 		return no.Value.data()
 	}
 	return nil
 }
-func (no ValueCachedNode[H]) data() []byte { return no.Value } //nolint:unused
+func (no ValueCachedNode[H]) Data() []byte { return no.Value } //nolint:unused
 
 func (EmptyCachedNode[H]) dataHash() *H   { return nil }                 //nolint:unused
 func (no LeafCachedNode[H]) dataHash() *H { return no.Value.dataHash() } //nolint:unused
@@ -269,7 +269,7 @@ func (no BranchCachedNode[H]) ByteSize() uint {
 }
 func (no ValueCachedNode[H]) ByteSize() uint { return (uint)(unsafe.Sizeof(no)) + uint(len(no.Value)) }
 
-func newCachedNodeFromNode[H hash.Hash, Hasher hash.Hasher[H]](n codec.EncodedNode) (CachedNode[H], error) {
+func NewCachedNodeFromNode[H hash.Hash, Hasher hash.Hasher[H]](n codec.EncodedNode) (CachedNode[H], error) {
 	switch n := n.(type) {
 	case codec.Empty:
 		return EmptyCachedNode[H]{}, nil

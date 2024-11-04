@@ -129,7 +129,7 @@ func Test_SharedTrieCache(t *testing.T) {
 				newRoot = trie.MustHash()
 			}
 
-			cache.(*TrieCache[hash.H256]).MergeInto(&localCache, newRoot)
+			cache.MergeInto(&localCache, newRoot)
 			unlock()
 			localCache.commit()
 
@@ -382,7 +382,7 @@ func Test_SharedTrieCache(t *testing.T) {
 					newRoot = trie.MustHash()
 				}
 				unlock()
-				cache.(*TrieCache[hash.H256]).MergeInto(&localCache, newRoot)
+				cache.MergeInto(&localCache, newRoot)
 			}
 
 			localCache.commit()

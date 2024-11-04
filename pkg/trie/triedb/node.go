@@ -30,7 +30,7 @@ type (
 
 	// newValueRef is a value that will be stored in the db
 	newValueRef[H hash.Hash] struct {
-		hash H
+		hash *H
 		data []byte
 	}
 )
@@ -39,38 +39,39 @@ type (
 func newEncodedValue[H hash.Hash](
 	value nodeValue, partial *nibbles.Nibbles, childF onChildStoreFn,
 ) (codec.EncodedValue, error) {
+	v, ok := value.(newValueRef[H])
+	if ok {
+		childRef, err := childF(newNodeToEncode{value: v.data}, partial, nil)
+		if err != nil {
+			return nil, err
+		}
+		var newHash H
+		switch cr := childRef.(type) {
+		case HashChildReference[H]:
+			newHash = cr.Hash
+		default:
+			panic("value node can never be inlined")
+		}
+		if v.hash != nil {
+			if *v.hash != newHash {
+				panic("shouldn't happen")
+			}
+		} else {
+			v.hash = &newHash
+			value = v
+		}
+	}
+
 	switch v := value.(type) {
 	case inline:
 		return codec.InlineValue(v), nil
 	case valueRef[H]:
 		return codec.HashedValue[H]{Hash: v.hash}, nil
 	case newValueRef[H]:
-		// Store value in db
-		childRef, err := childF(newNodeToEncode{value: v.data}, partial, nil)
-		if err != nil {
-			return nil, err
+		if v.hash == nil {
+			panic("New external value are always added before encoding a node")
 		}
-
-		// Check and get new new value hash
-		switch cr := childRef.(type) {
-		case HashChildReference[H]:
-			empty := *new(H)
-			if cr.Hash == empty {
-				panic("new external value are always added before encoding a node")
-			}
-
-			if v.hash != empty {
-				if v.hash != cr.Hash {
-					panic("hash mismatch")
-				}
-			} else {
-				v.hash = cr.Hash
-			}
-		default:
-			panic("value node can never be inlined")
-		}
-
-		return codec.HashedValue[H]{Hash: v.hash}, nil
+		return codec.HashedValue[H]{Hash: *v.hash}, nil
 	default:
 		panic("unreachable")
 	}
@@ -95,7 +96,7 @@ func (vr valueRef[H]) equal(other nodeValue) bool {
 	}
 }
 
-func (vr newValueRef[H]) getHash() H {
+func (vr newValueRef[H]) getHash() *H {
 	return vr.hash
 }
 func (vr newValueRef[H]) equal(other nodeValue) bool {
@@ -108,9 +109,9 @@ func (vr newValueRef[H]) equal(other nodeValue) bool {
 }
 
 func NewValue[H hash.Hash](data []byte, threshold int) nodeValue {
-	if len(data) >= threshold {
+	if len(data) > threshold {
 		return newValueRef[H]{
-			hash: *new(H),
+			hash: nil,
 			data: data,
 		}
 	}

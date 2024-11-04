@@ -24,7 +24,7 @@ func Test_ByteSize(t *testing.T) {
 		},
 	}
 
-	cachedNode, err := newCachedNodeFromNode[hash.H256, runtime.BlakeTwo256](encodedBranch)
+	cachedNode, err := NewCachedNodeFromNode[hash.H256, runtime.BlakeTwo256](encodedBranch)
 	require.NoError(t, err)
 	assert.Equal(t, 308, int(cachedNode.ByteSize()))
 
@@ -37,7 +37,7 @@ func Test_ByteSize(t *testing.T) {
 			codec.HashedNode[hash.H256]{childHash},
 		},
 	}
-	cachedNode, err = newCachedNodeFromNode[hash.H256, runtime.BlakeTwo256](encodedBranch)
+	cachedNode, err = NewCachedNodeFromNode[hash.H256, runtime.BlakeTwo256](encodedBranch)
 	require.NoError(t, err)
 	assert.Equal(t, 308+30, int(cachedNode.ByteSize()))
 }

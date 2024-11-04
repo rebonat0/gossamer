@@ -247,14 +247,14 @@ type SharedTrieCache[H runtime.Hash] struct {
 }
 
 // / Create a new [SharedTrieCache].
-func NewSharedTrieCache[H runtime.Hash](size uint) SharedTrieCache[H] {
+func NewSharedTrieCache[H runtime.Hash](size uint) *SharedTrieCache[H] {
 	totalBudget := size
 
 	// Split our memory budget between the two types of caches.
 	valueCacheBudget := uint(float32(totalBudget) * 0.20) // 20% for the value cache
 	nodeCacheBudget := totalBudget - valueCacheBudget     // 80% for the node cache
 
-	return SharedTrieCache[H]{
+	return &SharedTrieCache[H]{
 		inner: SharedTrieCacheInner[H]{
 			nodeCache:  NewSharedNodeCache[H](nodeCacheBudget),
 			valueCache: NewSharedValueCache[H](valueCacheBudget),

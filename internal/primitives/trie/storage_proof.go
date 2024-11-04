@@ -39,3 +39,18 @@ func NewStorageProof(trieNodes [][]byte) StorageProof {
 		trieNodes: set,
 	}
 }
+
+func (sp *StorageProof) Empty() bool {
+	return sp.trieNodes.Len() == 0
+}
+
+// / Convert into an iterator over encoded trie nodes in lexicographical order constructed
+// / from the proof.
+func (sp *StorageProof) Nodes() [][]byte {
+	var ret [][]byte
+	sp.trieNodes.Scan(func(v string) bool {
+		ret = append(ret, []byte(v))
+		return true
+	})
+	return ret
+}

@@ -341,18 +341,18 @@ func (tr *trieRecorder[H]) Record(access triedb.TrieAccess) {
 		}
 		tr.updateRecordedKeys(access.FullKey, triedb.RecordedValue)
 	case triedb.HashAccess:
-		log.Printf("TRACE: Recorded hash access for key: %v", access.FullKey)
+		log.Printf("TRACE: Recorded hash access for key: %s", access.FullKey)
 		// We don't need to update the `encoded_size_update` as the hash was already
 		// accounted for by the recorded node that holds the hash.
 		tr.updateRecordedKeys(access.FullKey, triedb.RecordedHash)
 	case triedb.NonExistingNodeAccess:
-		log.Printf("TRACE: Recorded non-existing value access for key for key: %v", access.FullKey)
+		log.Printf("TRACE: Recorded non-existing value access for key for key: %s", access.FullKey)
 		// Non-existing access means we recorded all trie nodes up to the value.
 		// Not the actual value, as it doesn't exist, but all trie nodes to know
 		// that the value doesn't exist in the trie.
 		tr.updateRecordedKeys(access.FullKey, triedb.RecordedValue)
 	case triedb.InlineValueAccess:
-		log.Printf("TRACE: Recorded inline value access for key: %v", access.FullKey)
+		log.Printf("TRACE: Recorded inline value access for key: %s", access.FullKey)
 		// A value was accessed that is stored inline a node and we recorded all trie nodes
 		// to access this value.
 		tr.updateRecordedKeys(access.FullKey, triedb.RecordedValue)

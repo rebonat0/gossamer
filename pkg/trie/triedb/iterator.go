@@ -503,7 +503,7 @@ type TrieItem struct {
 type TrieIterator[H hash.Hash, Item any] interface {
 	Seek(key []byte) error
 	Next() (Item, error)
-	Items() iter.Seq2[Item, error]
+	// Items() iter.Seq2[Item, error]
 }
 
 // / Iterator for going through all values in the trie in pre-order traversal order.
