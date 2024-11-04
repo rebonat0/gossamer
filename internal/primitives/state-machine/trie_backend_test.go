@@ -36,8 +36,8 @@ func testDB(
 		ksdb := trie.NewKeyspacedDB(mdb, childInfo.Keyspace())
 		trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](ksdb)
 		trie.SetVersion(stateVersion.TrieLayout())
-		require.NoError(t, trie.Put([]byte("value3"), bytes.Repeat([]byte{142}, 33)))
-		require.NoError(t, trie.Put([]byte("value4"), bytes.Repeat([]byte{124}, 33)))
+		require.NoError(t, trie.Set([]byte("value3"), bytes.Repeat([]byte{142}, 33)))
+		require.NoError(t, trie.Set([]byte("value4"), bytes.Repeat([]byte{124}, 33)))
 		root = trie.MustHash()
 	}
 
@@ -45,13 +45,13 @@ func testDB(
 		subRoot := scale.MustMarshal(root)
 
 		var build = func(trie *triedb.TrieDB[hash.H256, runtime.BlakeTwo256], childInfo storage.ChildInfo, subRoot []byte) {
-			require.NoError(t, trie.Put(childInfo.PrefixedStorageKey(), subRoot))
-			require.NoError(t, trie.Put([]byte("key"), []byte("value")))
-			require.NoError(t, trie.Put([]byte("value1"), []byte{42}))
-			require.NoError(t, trie.Put([]byte("value2"), []byte{24}))
-			require.NoError(t, trie.Put([]byte(":code"), []byte("return 42")))
+			require.NoError(t, trie.Set(childInfo.PrefixedStorageKey(), subRoot))
+			require.NoError(t, trie.Set([]byte("key"), []byte("value")))
+			require.NoError(t, trie.Set([]byte("value1"), []byte{42}))
+			require.NoError(t, trie.Set([]byte("value2"), []byte{24}))
+			require.NoError(t, trie.Set([]byte(":code"), []byte("return 42")))
 			for i := uint8(128); i < 255; i++ {
-				require.NoError(t, trie.Put([]byte{i}, []byte{i}))
+				require.NoError(t, trie.Set([]byte{i}, []byte{i}))
 			}
 		}
 

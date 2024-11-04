@@ -144,7 +144,7 @@ func Test_NewProof(t *testing.T) {
 			triedb := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](inmemoryDB)
 
 			for _, entry := range testCase.entries {
-				triedb.Put(entry.Key, entry.Value)
+				triedb.Set(entry.Key, entry.Value)
 			}
 
 			root := triedb.MustHash()

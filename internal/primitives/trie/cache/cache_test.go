@@ -30,7 +30,7 @@ func createTrie(t *testing.T) (*trie.MemoryDB[hash.H256, runtime.BlakeTwo256], h
 	trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](db)
 	trie.SetVersion(pkgtrie.V1)
 	for _, item := range testData {
-		err := trie.Put(item.Key, item.Value)
+		err := trie.Set(item.Key, item.Value)
 		require.NoError(t, err)
 	}
 	hash := trie.MustHash()
@@ -125,7 +125,7 @@ func Test_SharedTrieCache(t *testing.T) {
 				trie := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](
 					root, db, triedb.WithCache[hash.H256, runtime.BlakeTwo256](cache))
 				trie.SetVersion(pkgtrie.V1)
-				require.NoError(t, trie.Put(newKey, newValue))
+				require.NoError(t, trie.Set(newKey, newValue))
 				newRoot = trie.MustHash()
 			}
 
@@ -234,7 +234,7 @@ func Test_SharedTrieCache(t *testing.T) {
 				)
 
 				for _, item := range dataToAdd {
-					err := trie.Put(item.Key, item.Value)
+					err := trie.Set(item.Key, item.Value)
 					require.NoError(t, err)
 				}
 
@@ -248,7 +248,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			{
 				trie := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memoryDB)
 				for _, item := range dataToAdd {
-					err := trie.Put(item.Key, item.Value)
+					err := trie.Set(item.Key, item.Value)
 					require.NoError(t, err)
 				}
 				proofRoot = trie.MustHash()
@@ -377,7 +377,7 @@ func Test_SharedTrieCache(t *testing.T) {
 					value := bytes.Repeat([]byte{10}, 100)
 					// Ensure we add enough data that would overflow the cache.
 					for i := 0; i < (int(cacheSize) / 100 * 2); i++ {
-						require.NoError(t, trie.Put([]byte(fmt.Sprintf("key%d", i)), value))
+						require.NoError(t, trie.Set([]byte(fmt.Sprintf("key%d", i)), value))
 					}
 					newRoot = trie.MustHash()
 				}

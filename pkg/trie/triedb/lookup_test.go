@@ -60,7 +60,7 @@ func Test_TrieLookup_lookupValueWithCache(t *testing.T) {
 	}
 
 	for k, v := range entries {
-		require.NoError(t, trieDB.Put([]byte(k), v))
+		require.NoError(t, trieDB.Set([]byte(k), v))
 	}
 
 	err := trieDB.commit()

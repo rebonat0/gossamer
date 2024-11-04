@@ -66,7 +66,7 @@ func DeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
 	for i, kv := range delta {
 		_ = i
 		if kv.Value != nil {
-			err := trieDB.Put(kv.Key, kv.Value)
+			err := trieDB.Set(kv.Key, kv.Value)
 			if err != nil {
 				return *(new(H)), err
 			}

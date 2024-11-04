@@ -60,7 +60,7 @@ func createTrie(t *testing.T) (db *MemoryDB, root hash.H256) {
 	trieDB.SetVersion(trie.V1)
 
 	for _, td := range testData {
-		err := trieDB.Put(td.Key, td.Value)
+		err := trieDB.Set(td.Key, td.Value)
 		require.NoError(t, err)
 	}
 
@@ -77,7 +77,9 @@ func TestRecorder(t *testing.T) {
 		trieRecorder := rec.TrieRecorder(root)
 		trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db, triedb.WithRecorder[hash.H256, runtime.BlakeTwo256](trieRecorder))
 		trieDB.SetVersion(trie.V1)
-		require.Equal(t, testData[0].Value, trieDB.Get(testData[0].Key))
+		val, err := trieDB.Get(testData[0].Key)
+		require.NoError(t, err)
+		require.Equal(t, testData[0].Value, val)
 	}
 
 	storageProof := rec.DrainStorageProof()
@@ -86,7 +88,9 @@ func TestRecorder(t *testing.T) {
 	// Check that we recorded the required data
 	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
 	trieDB.SetVersion(trie.V1)
-	require.Equal(t, testData[0].Value, trieDB.Get(testData[0].Key))
+	val, err := trieDB.Get(testData[0].Key)
+	require.NoError(t, err)
+	require.Equal(t, testData[0].Value, val)
 }
 
 type recorderStats struct {
@@ -123,7 +127,9 @@ func TestRecorder_TransactionsRollback(t *testing.T) {
 			trieRecorder := rec.TrieRecorder(root)
 			trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db, triedb.WithRecorder[hash.H256, runtime.BlakeTwo256](trieRecorder))
 			trieDB.SetVersion(trie.V1)
-			assert.Equal(t, testData[i].Value, trieDB.Get(testData[i].Key))
+			val, err := trieDB.Get(testData[1].Key)
+			assert.NoError(t, err)
+			assert.Equal(t, testData[i].Value, val)
 		}
 		stats = append(stats, newRecorderStats(&rec))
 	}
@@ -142,10 +148,14 @@ func TestRecorder_TransactionsRollback(t *testing.T) {
 		// Check that the required data is still present.
 		for a := 0; a < 4; a++ {
 			if a < 4-i {
-				assert.Equal(t, testData[a].Value, trieDB.Get(testData[a].Key))
+				val, err := trieDB.Get(testData[a].Key)
+				require.NoError(t, err)
+				assert.Equal(t, testData[a].Value, val)
 			} else {
 				// All the data that we already rolled back, should be gone!
-				assert.Nil(t, trieDB.Get(testData[a].Key))
+				val, err := trieDB.Get(testData[a].Key)
+				require.NoError(t, err)
+				assert.Nil(t, val)
 			}
 		}
 
@@ -167,7 +177,9 @@ func TestRecorder_TransactionsCommit(t *testing.T) {
 			trieRecorder := rec.TrieRecorder(root)
 			trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db, triedb.WithRecorder[hash.H256, runtime.BlakeTwo256](trieRecorder))
 			trieDB.SetVersion(trie.V1)
-			assert.Equal(t, testData[i].Value, trieDB.Get(testData[i].Key))
+			val, err := trieDB.Get(testData[1].Key)
+			assert.NoError(t, err)
+			assert.Equal(t, testData[i].Value, val)
 		}
 	}
 
@@ -190,7 +202,9 @@ func TestRecorder_TransactionsCommit(t *testing.T) {
 
 	// Check that the required data is still present.
 	for i := 0; i < 4; i++ {
-		assert.Equal(t, testData[i].Value, trieDB.Get(testData[i].Key))
+		val, err := trieDB.Get(testData[1].Key)
+		assert.NoError(t, err)
+		assert.Equal(t, testData[i].Value, val)
 	}
 }
 
@@ -204,7 +218,9 @@ func TestRecorder_TransactionsCommitAndRollback(t *testing.T) {
 			trieRecorder := rec.TrieRecorder(root)
 			trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db, triedb.WithRecorder[hash.H256, runtime.BlakeTwo256](trieRecorder))
 			trieDB.SetVersion(trie.V1)
-			assert.Equal(t, testData[i].Value, trieDB.Get(testData[i].Key))
+			val, err := trieDB.Get(testData[1].Key)
+			assert.NoError(t, err)
+			assert.Equal(t, testData[i].Value, val)
 		}
 	}
 
@@ -217,7 +233,9 @@ func TestRecorder_TransactionsCommitAndRollback(t *testing.T) {
 			trieRecorder := rec.TrieRecorder(root)
 			trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, db, triedb.WithRecorder[hash.H256, runtime.BlakeTwo256](trieRecorder))
 			trieDB.SetVersion(trie.V1)
-			assert.Equal(t, testData[i].Value, trieDB.Get(testData[i].Key))
+			val, err := trieDB.Get(testData[1].Key)
+			assert.NoError(t, err)
+			assert.Equal(t, testData[i].Value, val)
 		}
 	}
 
@@ -243,9 +261,13 @@ func TestRecorder_TransactionsCommitAndRollback(t *testing.T) {
 	// Check that the required data is still present.
 	for i := 0; i < 4; i++ {
 		if i%2 == 0 {
-			assert.Equal(t, testData[i].Value, trieDB.Get(testData[i].Key))
+			val, err := trieDB.Get(testData[1].Key)
+			assert.NoError(t, err)
+			assert.Equal(t, testData[i].Value, val)
 		} else {
-			assert.Nil(t, trieDB.Get(testData[i].Key))
+			val, err := trieDB.Get(testData[1].Key)
+			assert.NoError(t, err)
+			assert.Nil(t, val)
 		}
 	}
 }

@@ -29,7 +29,7 @@ trie := triedb.NewEmptyTrieDB(db)
 To insert a key and its associated value:
 
 ```go
-err := trie.Put([]byte("key"), []byte("value"))
+err := trie.Set([]byte("key"), []byte("value"))
 ```
 
 ### Get Data

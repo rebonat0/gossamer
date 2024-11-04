@@ -148,7 +148,7 @@ func Test_GenerateAndVerify(t *testing.T) {
 				triedb.SetVersion(trieVersion)
 
 				for _, entry := range testCase.entries {
-					triedb.Put(entry.Key, entry.Value)
+					triedb.Set(entry.Key, entry.Value)
 				}
 
 				root := triedb.MustHash()
@@ -161,9 +161,11 @@ func Test_GenerateAndVerify(t *testing.T) {
 				// Verify proof
 				items := make([]proofItem, len(testCase.keys))
 				for i, key := range testCase.keys {
+					val, err := triedb.Get([]byte(key))
+					require.NoError(t, err)
 					items[i] = proofItem{
 						key:   []byte(key),
-						value: triedb.Get([]byte(key)),
+						value: val,
 					}
 				}
 				err = proof.Verify(trieVersion, root.Bytes(), items)

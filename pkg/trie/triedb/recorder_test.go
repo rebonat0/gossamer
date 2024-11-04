@@ -17,11 +17,11 @@ func TestRecorder(t *testing.T) {
 	inmemoryDB := NewMemoryDB()
 	triedb := NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](inmemoryDB)
 
-	triedb.Put([]byte("pol"), []byte("polvalue"))
-	triedb.Put([]byte("polka"), []byte("polkavalue"))
-	triedb.Put([]byte("polkadot"), []byte("polkadotvalue"))
-	triedb.Put([]byte("go"), []byte("govalue"))
-	triedb.Put([]byte("gossamer"), []byte("gossamervalue"))
+	triedb.Set([]byte("pol"), []byte("polvalue"))
+	triedb.Set([]byte("polka"), []byte("polkavalue"))
+	triedb.Set([]byte("polkadot"), []byte("polkadotvalue"))
+	triedb.Set([]byte("go"), []byte("govalue"))
+	triedb.Set([]byte("gossamer"), []byte("gossamervalue"))
 
 	// Commit and get root
 	root := triedb.MustHash()

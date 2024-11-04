@@ -135,13 +135,8 @@ func (t *TrieDB[H, Hasher]) MustHash() H {
 // Get returns the value in the node of the trie
 // which matches its key with the key given.
 // Note the key argument is given in little Endian format.
-func (t *TrieDB[H, Hasher]) Get(key []byte) []byte {
-	val, err := t.lookup(key, t.rootHandle)
-	if err != nil {
-		return nil
-	}
-
-	return val
+func (t *TrieDB[H, Hasher]) Get(key []byte) ([]byte, error) {
+	return t.lookup(key, t.rootHandle)
 }
 
 func (t *TrieDB[H, Hasher]) lookup(fullKey []byte, handle NodeHandle) ([]byte, error) {
@@ -281,7 +276,7 @@ func (t *TrieDB[H, Hasher]) insert(keyNibbles nibbles.Nibbles, value []byte) err
 }
 
 // Put inserts the given key / value pair into the trie
-func (t *TrieDB[H, Hasher]) Put(key, value []byte) error {
+func (t *TrieDB[H, Hasher]) Set(key, value []byte) error {
 	copiedKey := append([]byte{}, key...)
 	copiedValue := append([]byte{}, value...)
 	return t.insert(nibbles.NewNibbles(copiedKey), copiedValue)

@@ -30,7 +30,7 @@ func Test_TrieDBRawIterator(t *testing.T) {
 	trieDB.SetVersion(trie.V1)
 
 	for k, v := range entries {
-		err := trieDB.Put([]byte(k), v)
+		err := trieDB.Set([]byte(k), v)
 		assert.NoError(t, err)
 	}
 	assert.NoError(t, trieDB.commit())
@@ -185,7 +185,7 @@ func TestTrieDBIterator(t *testing.T) {
 	trieDB.SetVersion(trie.V1)
 
 	for k, v := range entries {
-		err := trieDB.Put([]byte(k), v)
+		err := trieDB.Set([]byte(k), v)
 		assert.NoError(t, err)
 	}
 	assert.NoError(t, trieDB.commit())
@@ -283,7 +283,7 @@ func TestTrieDBKeyIterator(t *testing.T) {
 	trieDB.SetVersion(trie.V1)
 
 	for k, v := range entries {
-		err := trieDB.Put([]byte(k), v)
+		err := trieDB.Set([]byte(k), v)
 		assert.NoError(t, err)
 	}
 	assert.NoError(t, trieDB.commit())

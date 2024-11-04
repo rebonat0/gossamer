@@ -30,9 +30,9 @@ func TestTrieBackendEssence(t *testing.T) {
 		{
 			trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](mdb)
 			trie.SetVersion(triedb.V1)
-			require.NoError(t, trie.Put([]byte("3"), []byte{1}))
-			require.NoError(t, trie.Put([]byte("4"), []byte{1}))
-			require.NoError(t, trie.Put([]byte("6"), []byte{1}))
+			require.NoError(t, trie.Set([]byte("3"), []byte{1}))
+			require.NoError(t, trie.Set([]byte("4"), []byte{1}))
+			require.NoError(t, trie.Set([]byte("6"), []byte{1}))
 			root1 = trie.MustHash()
 
 		}
@@ -42,11 +42,11 @@ func TestTrieBackendEssence(t *testing.T) {
 			// as top trie (contents must remain the same).
 			trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](ksdb)
 			trie.SetVersion(triedb.V1)
-			err := trie.Put([]byte("3"), []byte{1})
+			err := trie.Set([]byte("3"), []byte{1})
 			require.NoError(t, err)
-			require.NoError(t, trie.Put([]byte("3"), []byte{1}))
-			require.NoError(t, trie.Put([]byte("4"), []byte{1}))
-			require.NoError(t, trie.Put([]byte("6"), []byte{1}))
+			require.NoError(t, trie.Set([]byte("3"), []byte{1}))
+			require.NoError(t, trie.Set([]byte("4"), []byte{1}))
+			require.NoError(t, trie.Set([]byte("6"), []byte{1}))
 			root := trie.MustHash()
 			require.Equal(t, root1, root)
 		}
@@ -54,10 +54,12 @@ func TestTrieBackendEssence(t *testing.T) {
 			trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](mdb)
 			trie.SetVersion(triedb.V1)
 			bleh := childInfo.PrefixedStorageKey()
-			require.NoError(t, trie.Put(slices.Clone(bleh), root1.Bytes()))
+			require.NoError(t, trie.Set(slices.Clone(bleh), root1.Bytes()))
 			root2 = trie.MustHash()
 
-			require.Equal(t, root1.Bytes(), trie.Get(bleh))
+			val, err := trie.Get(bleh)
+			require.NoError(t, err)
+			require.Equal(t, root1.Bytes(), val)
 		}
 
 		essence1 := newTrieBackendEssence[hash.H256, runtime.BlakeTwo256](HashDBTrieBackendStorage[hash.H256]{mdb}, root1, nil, nil)

@@ -29,7 +29,7 @@ func Benchmark_ValueCache(b *testing.B) {
 	trie.SetVersion(version)
 
 	for k, v := range entries {
-		require.NoError(b, trie.Put([]byte(k), v))
+		require.NoError(b, trie.Set([]byte(k), v))
 	}
 	err := trie.commit()
 	require.NoError(b, err)
@@ -78,7 +78,7 @@ func Benchmark_NodesCache(b *testing.B) {
 	trie.SetVersion(version)
 
 	for k, v := range entries {
-		require.NoError(b, trie.Put([]byte(k), v))
+		require.NoError(b, trie.Set([]byte(k), v))
 	}
 	err := trie.commit()
 	require.NoError(b, err)
