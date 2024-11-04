@@ -21,6 +21,7 @@ type Value interface {
 	~[]byte
 }
 
+// / Reference-counted memory-based [hashdb.HashDB] implementation.
 type MemoryDB[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key]] struct {
 	data           map[Key]dataRC
 	hashedNullNode H
@@ -85,7 +86,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF]) raw(key H, prefix hashdb.Prefix) *dataR
 	return nil
 }
 
-// / Consolidate all the entries of `other` into `self`.
+// / Consolidate all the entries of other into self.
 func (mdb *MemoryDB[H, Hasher, Key, KF]) Consolidate(other *MemoryDB[H, Hasher, Key, KF]) {
 	for key, value := range other.Drain() {
 		entry, ok := mdb.data[key]
@@ -227,6 +228,7 @@ func (PrefixedKey[H]) Key(key H, prefix hashdb.Prefix) string {
 	return string(NewPrefixedKey(key, prefix))
 }
 
+// / Derive a database key from hash value of the node (key) and the node prefix.
 func NewPrefixedKey[H Hash](key H, prefix hashdb.Prefix) []byte {
 	prefixedKey := prefix.Key
 	if prefix.Padded != nil {

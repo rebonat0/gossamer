@@ -62,7 +62,7 @@ func Test_SharedTrieCache(t *testing.T) {
 		require.Equal(t, 0, sharedCache.inner.valueCache.lru.Len())
 		require.Equal(t, 0, sharedCache.inner.nodeCache.lru.Len())
 
-		localCache.commit()
+		localCache.Commit()
 
 		// Now we should have the cached items in the shared cache.
 		require.GreaterOrEqual(t, sharedCache.inner.nodeCache.lru.Len(), 1)
@@ -71,7 +71,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			ValueCacheKey[hash.H256]{
 				StorageRoot: root,
 				StorageKey:  testData[0].Key,
-			}.ValueCacheKeyHash(),
+			}.ValueCacheKeyComparable(),
 		)
 		require.True(t, ok)
 		existing, ok := cachedVal.(triedb.ExistingCachedValue[hash.H256])
@@ -85,7 +85,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			ValueCacheKey[hash.H256]{
 				StorageRoot: root,
 				StorageKey:  testData[1].Key,
-			}.ValueCacheKeyHash(),
+			}.ValueCacheKeyComparable(),
 			triedb.ExistingCachedValue[hash.H256]{
 				Hash: hash.NewH256(),
 				Data: fakeData,
@@ -131,7 +131,7 @@ func Test_SharedTrieCache(t *testing.T) {
 
 			cache.MergeInto(&localCache, newRoot)
 			unlock()
-			localCache.commit()
+			localCache.Commit()
 
 		}
 
@@ -140,7 +140,7 @@ func Test_SharedTrieCache(t *testing.T) {
 		cachedVal, ok := sharedCache.inner.valueCache.lru.Peek(ValueCacheKey[hash.H256]{
 			StorageRoot: newRoot,
 			StorageKey:  newKey,
-		}.ValueCacheKeyHash())
+		}.ValueCacheKeyComparable())
 		require.True(t, ok)
 		existing, ok := cachedVal.(triedb.ExistingCachedValue[hash.H256])
 		require.True(t, ok)
@@ -184,7 +184,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			}
 
 			storageProof := recorder.DrainStorageProof()
-			memoryDB := trie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
+			memoryDB := trie.NewMemoryDBFromStorageProof[hash.H256, runtime.BlakeTwo256](storageProof)
 
 			{
 				trie := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memoryDB)
@@ -243,7 +243,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			}
 
 			storageProof := recorder.DrainStorageProof()
-			memoryDB := trie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
+			memoryDB := trie.NewMemoryDBFromStorageProof[hash.H256, runtime.BlakeTwo256](storageProof)
 			var proofRoot hash.H256
 			{
 				trie := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memoryDB)
@@ -278,7 +278,7 @@ func Test_SharedTrieCache(t *testing.T) {
 			}
 
 			unlock()
-			localCache.commit()
+			localCache.Commit()
 		}
 
 		// Check that all items are there.
@@ -317,7 +317,7 @@ func Test_SharedTrieCache(t *testing.T) {
 					require.Equal(t, item.Value, *val)
 				}
 				unlock()
-				localCache.commit()
+				localCache.Commit()
 			}
 
 			// Ensure that the accessed items are part of the shared value
@@ -326,7 +326,7 @@ func Test_SharedTrieCache(t *testing.T) {
 				_, ok := sharedCache.inner.valueCache.lru.Peek(ValueCacheKey[hash.H256]{
 					StorageRoot: root,
 					StorageKey:  item.Key,
-				}.ValueCacheKeyHash())
+				}.ValueCacheKeyComparable())
 				require.True(t, ok)
 			}
 
@@ -351,7 +351,7 @@ func Test_SharedTrieCache(t *testing.T) {
 				require.Equal(t, item.Value, *val)
 			}
 			unlock()
-			localCache.commit()
+			localCache.Commit()
 		}
 
 		// Ensure that the most recently used nodes changed as well.
@@ -385,7 +385,7 @@ func Test_SharedTrieCache(t *testing.T) {
 				cache.MergeInto(&localCache, newRoot)
 			}
 
-			localCache.commit()
+			localCache.Commit()
 		}
 
 		require.Less(t, sharedCache.usedMemorySize(), cacheSize)

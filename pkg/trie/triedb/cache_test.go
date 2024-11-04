@@ -20,7 +20,7 @@ func Test_ByteSize(t *testing.T) {
 		Children: [codec.ChildrenCapacity]codec.MerkleValue{
 			nil, nil, nil, nil, nil,
 			nil, nil, nil, nil, nil,
-			codec.HashedNode[hash.H256]{childHash},
+			codec.HashedNode[hash.H256]{Hash: childHash},
 		},
 	}
 
@@ -34,7 +34,7 @@ func Test_ByteSize(t *testing.T) {
 		Children: [codec.ChildrenCapacity]codec.MerkleValue{
 			nil, nil, nil, nil, nil,
 			nil, nil, nil, nil, nil,
-			codec.HashedNode[hash.H256]{childHash},
+			codec.HashedNode[hash.H256]{Hash: childHash},
 		},
 	}
 	cachedNode, err = NewCachedNodeFromNode[hash.H256, runtime.BlakeTwo256](encodedBranch)

@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	_ StorageIterator[hash.H256, runtime.BlakeTwo256] = &RawIter[hash.H256, runtime.BlakeTwo256]{}
+	_ StorageIterator[hash.H256, runtime.BlakeTwo256] = &rawIter[hash.H256, runtime.BlakeTwo256]{}
 	_ Backend[hash.H256, runtime.BlakeTwo256]         = &TrieBackend[hash.H256, runtime.BlakeTwo256]{}
 )
 
@@ -33,7 +33,7 @@ func testDB(
 	var root hash.H256
 
 	{
-		ksdb := trie.NewKeySpacedDB(mdb, childInfo.Keyspace())
+		ksdb := trie.NewKeyspacedDB(mdb, childInfo.Keyspace())
 		trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](ksdb)
 		trie.SetVersion(stateVersion.TrieLayout())
 		require.NoError(t, trie.Put([]byte("value3"), bytes.Repeat([]byte{142}, 33)))
@@ -304,10 +304,7 @@ func TestTrieBackend(t *testing.T) {
 				cache = &local
 			}
 			tb := testTrie(t, param.StateVersion, cache, param.Recorder)
-			newRoot, tx := tb.StorageRoot([]struct {
-				Key   []byte
-				Value []byte
-			}{{Key: []byte("new-key"), Value: []byte("new-value")}}, param.StateVersion)
+			newRoot, tx := tb.StorageRoot([]Delta{{Key: []byte("new-key"), Value: []byte("new-value")}}, param.StateVersion)
 			expected, _ := testTrie(t, param.StateVersion, cache, param.Recorder).StorageRoot(nil, param.StateVersion)
 			require.NotEmpty(t, tx.Drain())
 			require.NotEqual(t, expected, newRoot)
@@ -586,23 +583,11 @@ func TestTrieBackend(t *testing.T) {
 			inMemory := NewMemoryDBTrieBackend[hash.H256, runtime.BlakeTwo256]()
 			inMemory = inMemory.update(contents, stateVersion)
 			childStorageKeys := []storage.ChildInfo{childInfo1, childInfo2}
-			var childDeltas []struct {
-				storage.ChildInfo
-				Delta []struct {
-					Key   []byte
-					Value []byte
-				}
-			}
+			var childDeltas []ChildDelta
 			for _, childStorageKey := range childStorageKeys {
-				childDeltas = append(childDeltas, struct {
-					storage.ChildInfo
-					Delta []struct {
-						Key   []byte
-						Value []byte
-					}
-				}{
+				childDeltas = append(childDeltas, ChildDelta{
 					ChildInfo: childStorageKey,
-					Delta:     nil,
+					Deltas:    nil,
 				})
 			}
 			inMemoryRoot, _ := inMemory.FullStorageRoot(nil, childDeltas, stateVersion)
@@ -736,23 +721,11 @@ func TestTrieBackend(t *testing.T) {
 			inMemory := NewMemoryDBTrieBackend[hash.H256, runtime.BlakeTwo256]()
 			inMemory = inMemory.update(contents, stateVersion)
 			childStorageKeys := []storage.ChildInfo{childInfo1}
-			var childDeltas []struct {
-				storage.ChildInfo
-				Delta []struct {
-					Key   []byte
-					Value []byte
-				}
-			}
+			var childDeltas []ChildDelta
 			for _, childStorageKey := range childStorageKeys {
-				childDeltas = append(childDeltas, struct {
-					storage.ChildInfo
-					Delta []struct {
-						Key   []byte
-						Value []byte
-					}
-				}{
+				childDeltas = append(childDeltas, ChildDelta{
 					ChildInfo: childStorageKey,
-					Delta:     nil,
+					Deltas:    nil,
 				})
 			}
 			inMemoryRoot, _ := inMemory.FullStorageRoot(nil, childDeltas, stateVersion)
@@ -915,23 +888,11 @@ func TestTrieBackend(t *testing.T) {
 			inMemory := NewMemoryDBTrieBackend[hash.H256, runtime.BlakeTwo256]()
 			inMemory = inMemory.update(contents, stateVersion)
 			childStorageKeys := []storage.ChildInfo{childInfo1, childInfo2}
-			var childDeltas []struct {
-				storage.ChildInfo
-				Delta []struct {
-					Key   []byte
-					Value []byte
-				}
-			}
+			var childDeltas []ChildDelta
 			for _, childStorageKey := range childStorageKeys {
-				childDeltas = append(childDeltas, struct {
-					storage.ChildInfo
-					Delta []struct {
-						Key   []byte
-						Value []byte
-					}
-				}{
+				childDeltas = append(childDeltas, ChildDelta{
 					ChildInfo: childStorageKey,
-					Delta:     nil,
+					Deltas:    nil,
 				})
 			}
 			inMemoryRoot, _ := inMemory.FullStorageRoot(nil, childDeltas, stateVersion)

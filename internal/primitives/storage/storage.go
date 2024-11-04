@@ -4,45 +4,13 @@ import (
 	"strings"
 
 	"github.com/ChainSafe/gossamer/pkg/trie"
-	"github.com/tidwall/btree"
 )
 
 // / Storage key.
 type StorageKey []byte
 
-// / Storage key with read/write tracking information.
-type TrackedStorageKey struct {
-	Key         []byte
-	Reads       uint32
-	Writes      uint32
-	Whitelisted bool
-}
-
 // / Storage key of a child trie, it contains the prefix to the key.
 type PrefixedStorageKey []byte
-
-// / Storage data associated to a [`StorageKey`].
-type StorageData []byte
-
-// / Child trie storage data.
-type StorageChild struct {
-	/// Child data for storage.
-	Data btree.Map[string, []byte]
-	/// Associated child info for a child
-	/// trie.
-	ChildInfo ChildInfo
-}
-
-// / Struct containing data needed for a storage.
-// #[cfg(feature = "std")]
-// #[derive(Default, Debug, Clone)]
-type Storage struct {
-	/// Top trie storage data.
-	Top btree.Map[string, []byte]
-	/// Children trie storage data. Key does not include prefix, only for the `default` trie kind,
-	/// of `ChildType::ParentKeyId` type.
-	ChildrenDefault map[string]StorageChild
-}
 
 // / Information related to a child state.
 type ChildInfo interface {
@@ -53,16 +21,12 @@ type ChildInfo interface {
 	// / Returns a reference to the location in the direct parent of
 	// / this trie but without the common prefix for this kind of
 	// / child trie.
-	StorageKey() []byte
+	StorageKey() StorageKey
 	/// Return a the full location in the direct parent of
 	/// this trie.
 	PrefixedStorageKey() PrefixedStorageKey
 	/// Returns the type for this child info.
 	ChildType() ChildType
-}
-type ChildInfos interface {
-	ChildInfoParentKeyID
-	ChildInfo
 }
 
 // / This is the one used by default.
@@ -70,7 +34,7 @@ type ChildInfoParentKeyID ChildTrieParentKeyID
 
 // / Returns byte sequence (keyspace) that can be use by underlying db to isolate keys.
 // / This is a unique id of the child trie. The collision resistance of this value
-// / depends on the type of child info use. For `ChildInfo::Default` it is and need to be.
+// / depends on the type of child info use.
 func (cipkid ChildInfoParentKeyID) Keyspace() []byte {
 	return cipkid.StorageKey()
 }
@@ -78,7 +42,7 @@ func (cipkid ChildInfoParentKeyID) Keyspace() []byte {
 // / Returns a reference to the location in the direct parent of
 // / this trie but without the common prefix for this kind of
 // / child trie.
-func (cipkid ChildInfoParentKeyID) StorageKey() []byte {
+func (cipkid ChildInfoParentKeyID) StorageKey() StorageKey {
 	return ChildTrieParentKeyID(cipkid).data
 }
 
@@ -86,7 +50,6 @@ func (cipkid ChildInfoParentKeyID) StorageKey() []byte {
 // / this trie.
 func (cipkid ChildInfoParentKeyID) PrefixedStorageKey() PrefixedStorageKey {
 	return ChildTypeParentKeyID.NewPrefixedKey(cipkid.data)
-	// return ChildTrieParentKeyID(cipkid).data
 }
 
 // / Returns the type for this child info.
@@ -114,29 +77,8 @@ const (
 	ChildTypeParentKeyID ChildType = iota + 1
 )
 
-// impl ChildType {
-// 	/// Try to get a child type from its `u32` representation.
-// 	pub fn new(repr: u32) -> Option<ChildType> {
-// 		Some(match repr {
-// 			r if r == ChildType::ParentKeyId as u32 => ChildType::ParentKeyId,
-// 			_ => return None,
-// 		})
-// 	}
-
-// /// Transform a prefixed key into a tuple of the child type
-// /// and the unprefixed representation of the key.
-//
-//	pub fn from_prefixed_key<'a>(storage_key: &'a PrefixedStorageKey) -> Option<(Self, &'a [u8])> {
-//		let match_type = |storage_key: &'a [u8], child_type: ChildType| {
-//			let prefix = child_type.parent_prefix();
-//			if storage_key.starts_with(prefix) {
-//				Some((child_type, &storage_key[prefix.len()..]))
-//			} else {
-//				None
-//			}
-//		};
-//		match_type(storage_key, ChildType::ParentKeyId)
-//	}
+// / Transform a prefixed key into a tuple of the child type
+// / and the unprefixed representation of the key.
 func NewChildTypeFromPrefixedKey(storageKey PrefixedStorageKey) *struct {
 	ChildType
 	Key []byte
@@ -153,45 +95,18 @@ func NewChildTypeFromPrefixedKey(storageKey PrefixedStorageKey) *struct {
 	}
 }
 
-// /// Produce a prefixed key for a given child type.
-//
-//	fn new_prefixed_key(&self, key: &[u8]) -> PrefixedStorageKey {
-//		let parent_prefix = self.parent_prefix();
-//		let mut result = Vec::with_capacity(parent_prefix.len() + key.len());
-//		result.extend_from_slice(parent_prefix);
-//		result.extend_from_slice(key);
-//		PrefixedStorageKey(result)
-//	}
+// / Produce a prefixed key for a given child type.
 func (ct ChildType) NewPrefixedKey(key []byte) PrefixedStorageKey {
 	parentPrefix := ct.ParentPrefix()
 	result := append(parentPrefix, key...)
 	return PrefixedStorageKey(result)
 }
 
-// 	/// Prefixes a vec with the prefix for this child type.
-// 	fn do_prefix_key(&self, key: &mut Vec<u8>) {
-// 		let parent_prefix = self.parent_prefix();
-// 		let key_len = key.len();
-// 		if !parent_prefix.is_empty() {
-// 			key.resize(key_len + parent_prefix.len(), 0);
-// 			key.copy_within(..key_len, parent_prefix.len());
-// 			key[..parent_prefix.len()].copy_from_slice(parent_prefix);
-// 		}
-// 	}
-
-// 	/// Returns the location reserved for this child trie in their parent trie if there
-// 	/// is one.
-// 	pub fn parent_prefix(&self) -> &'static [u8] {
-// 		match self {
-// 			&ChildType::ParentKeyId => well_known_keys::DEFAULT_CHILD_STORAGE_KEY_PREFIX,
-// 		}
-// 	}
-// }
-
 // / Prefix of the default child storage keys in the top trie.
-// pub const DEFAULT_CHILD_STORAGE_KEY_PREFIX: &[u8] = b":child_storage:default:";
 var DefaultChildStorageKeyPrefix = []byte(":child_storage:default:")
 
+// / Returns the location reserved for this child trie in their parent trie if there
+// / is one.
 func (ct ChildType) ParentPrefix() []byte {
 	switch ct {
 	case ChildTypeParentKeyID:
@@ -216,16 +131,7 @@ type ChildTrieParentKeyID struct {
 // / Different possible state version.
 // /
 // / V0 and V1 uses a same trie implementation, but V1 will write external value node in the trie for
-// / value with size at least `TRIE_VALUE_NODE_THRESHOLD`.
-// #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-// #[cfg_attr(feature = "std", derive(Encode, Decode))]
-//
-//	pub enum StateVersion {
-//		/// Old state version, no value nodes.
-//		V0 = 0,
-//		/// New state version can use value nodes.
-//		V1 = 1,
-//	}
+// / value with size greater than 32 bytes.
 type StateVersion uint
 
 const (

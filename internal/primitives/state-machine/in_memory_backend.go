@@ -47,46 +47,22 @@ func (tb *MemoryDBTrieBackend[H, Hasher]) insert(changes []change, stateVersion 
 			child = append(child, change)
 		}
 	}
-	var deltas []struct {
-		Key   []byte
-		Value []byte
-	}
+	var deltas []Delta
 	for _, change := range top {
 		for _, skv := range change.StorageCollection {
-			deltas = append(deltas, struct {
-				Key   []byte
-				Value []byte
-			}{skv.StorageKey, skv.StorageValue})
+			deltas = append(deltas, Delta{skv.StorageKey, skv.StorageValue})
 		}
 	}
 
-	var childDeltas []struct {
-		storage.ChildInfo
-		Delta []struct {
-			Key   []byte
-			Value []byte
-		}
-	}
+	var childDeltas []ChildDelta
 	for _, change := range child {
-		var delta []struct {
-			Key   []byte
-			Value []byte
-		}
+		var delta []Delta
 		for _, skv := range change.StorageCollection {
-			delta = append(delta, struct {
-				Key   []byte
-				Value []byte
-			}{skv.StorageKey, skv.StorageValue})
+			delta = append(delta, Delta{skv.StorageKey, skv.StorageValue})
 		}
-		childDeltas = append(childDeltas, struct {
-			storage.ChildInfo
-			Delta []struct {
-				Key   []byte
-				Value []byte
-			}
-		}{
+		childDeltas = append(childDeltas, ChildDelta{
 			ChildInfo: change.ChildInfo,
-			Delta:     delta,
+			Deltas:    delta,
 		})
 	}
 	root, tx := tb.FullStorageRoot(deltas, childDeltas, stateVersion)

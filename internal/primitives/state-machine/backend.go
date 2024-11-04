@@ -229,6 +229,14 @@ func NewBackendTransaction[Hash runtime.Hash, Hasher runtime.Hasher[Hash]]() Bac
 	return BackendTransaction[Hash, Hasher]{trie.NewPrefixedMemoryDB[Hash, Hasher]()}
 }
 
+// Reexport of [trie.KeyValue]
+type Delta = trie.KeyValue
+
+type ChildDelta struct {
+	storage.ChildInfo
+	Deltas []Delta
+}
+
 // / A state backend is used to read state data and can have changes committed
 // / to it.
 // /
@@ -308,10 +316,7 @@ type Backend[Hash runtime.Hash, H runtime.Hasher[Hash]] interface {
 	// ) -> (H::Out, Self::Transaction)
 	// where
 	// 	H::Out: Ord;
-	StorageRoot(delta []struct {
-		Key   []byte
-		Value []byte
-	}, stateVersion storage.StateVersion) (Hash, BackendTransaction[Hash, H])
+	StorageRoot(delta []Delta, stateVersion storage.StateVersion) (Hash, BackendTransaction[Hash, H])
 
 	/// Calculate the child storage root, with given delta over what is already stored in
 	/// the backend, and produce a "transaction" that can be used to commit. The second argument
@@ -324,10 +329,7 @@ type Backend[Hash runtime.Hash, H runtime.Hasher[Hash]] interface {
 	// ) -> (H::Out, bool, Self::Transaction)
 	// where
 	// 	H::Out: Ord;
-	ChildStorageRoot(childInfo storage.ChildInfo, delta []struct {
-		Key   []byte
-		Value []byte
-	}, stateVersion storage.StateVersion) (Hash, bool, BackendTransaction[Hash, H])
+	ChildStorageRoot(childInfo storage.ChildInfo, delta []Delta, stateVersion storage.StateVersion) (Hash, bool, BackendTransaction[Hash, H])
 
 	/// Returns a lifetimeless raw storage iterator.
 	// fn raw_iter(&self, args: IterArgs) -> Result<Self::RawIter, Self::Error>;
@@ -367,17 +369,8 @@ type Backend[Hash runtime.Hash, H runtime.Hasher[Hash]] interface {
 	// where
 	// 	H::Out: Ord + Encode,
 	FullStorageRoot(
-		delta []struct {
-			Key   []byte
-			Value []byte
-		},
-		childDeltas []struct {
-			storage.ChildInfo
-			Delta []struct {
-				Key   []byte
-				Value []byte
-			}
-		},
+		delta []Delta,
+		childDeltas []ChildDelta,
 		stateVersion storage.StateVersion,
 	) (Hash, BackendTransaction[Hash, H])
 

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ChainSafe/gossamer/internal/database"
-	hashdb "github.com/ChainSafe/gossamer/internal/hash-db"
 	memorydb "github.com/ChainSafe/gossamer/internal/memory-db"
 	"github.com/ChainSafe/gossamer/internal/primitives/core/hash"
 	"github.com/ChainSafe/gossamer/internal/primitives/runtime"
@@ -17,63 +15,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-type hashConstructor[H runtime.Hash] func(b []byte) H
-type memoryDBWrapper[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
-	ptrie.MemoryDB[H, Hasher]
-	hashConstructor[H]
-}
-
-func newMemoryDBWrapper() *memoryDBWrapper[hash.H256, runtime.BlakeTwo256] {
-	return &memoryDBWrapper[hash.H256, runtime.BlakeTwo256]{
-		hashConstructor: func(b []byte) hash.H256 {
-			return hash.H256(b)
-		},
-		MemoryDB: *ptrie.NewMemoryDB[hash.H256, runtime.BlakeTwo256](),
-	}
-}
-
-func (mdbw *memoryDBWrapper[H, Hasher]) Get(key []byte) (value []byte, err error) {
-	hash := mdbw.hashConstructor(key)
-	val := mdbw.MemoryDB.Get(hash, hashdb.EmptyPrefix)
-	if val == nil {
-		return nil, fmt.Errorf("missing value")
-	}
-	value = val
-	return value, nil
-}
-func (mdbw *memoryDBWrapper[H, Hasher]) Put(key, value []byte) error {
-	k := mdbw.MemoryDB.Insert(hashdb.EmptyPrefix, value)
-	if string(k.Bytes()) != string(key) {
-		panic("huh? should be the same")
-	}
-	return nil
-}
-func (mdbw *memoryDBWrapper[H, Hasher]) Del(key []byte) error {
-	mdbw.MemoryDB.Remove(mdbw.hashConstructor(key), hashdb.EmptyPrefix)
-	return nil
-}
-func (mdbw *memoryDBWrapper[H, Hasher]) Flush() error {
-	return nil
-}
-
-type MemoryBatch[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
-	*memoryDBWrapper[H, Hasher]
-}
-
-func (b *MemoryBatch[H, Hasher]) Close() error {
-	return nil
-}
-
-func (*MemoryBatch[H, Hasher]) Reset() {}
-
-func (b *MemoryBatch[H, Hasher]) ValueSize() int {
-	return 1
-}
-func (mdbw *memoryDBWrapper[H, Hasher]) NewBatch() database.Batch {
-	return &MemoryBatch[H, Hasher]{
-		memoryDBWrapper: mdbw}
-}
-
 func makeValue(i uint8) []byte {
 	val := make([]byte, 64)
 	for j := 0; j < len(val); j++ {
@@ -82,13 +23,7 @@ func makeValue(i uint8) []byte {
 	return val
 }
 
-var testData []struct {
-	Key   []byte
-	Value []byte
-} = []struct {
-	Key   []byte
-	Value []byte
-}{
+var testData []ptrie.KeyValue = []ptrie.KeyValue{
 	{
 		Key:   []byte("key1"),
 		Value: makeValue(1),
@@ -146,7 +81,7 @@ func TestRecorder(t *testing.T) {
 	}
 
 	storageProof := rec.DrainStorageProof()
-	memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
+	memDB := ptrie.NewMemoryDBFromStorageProof[hash.H256, runtime.BlakeTwo256](storageProof)
 
 	// Check that we recorded the required data
 	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
@@ -199,7 +134,7 @@ func TestRecorder_TransactionsRollback(t *testing.T) {
 		assert.Equal(t, stats[4-i], newRecorderStats(&rec))
 
 		storageProof := rec.StorageProof()
-		memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
+		memDB := ptrie.NewMemoryDBFromStorageProof[hash.H256, runtime.BlakeTwo256](storageProof)
 
 		trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
 		trieDB.SetVersion(trie.V1)
@@ -247,7 +182,7 @@ func TestRecorder_TransactionsCommit(t *testing.T) {
 	assert.Equal(t, stats, newRecorderStats(&rec))
 
 	storageProof := rec.StorageProof()
-	memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
+	memDB := ptrie.NewMemoryDBFromStorageProof[hash.H256, runtime.BlakeTwo256](storageProof)
 
 	// Check that we recorded the required data
 	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)
@@ -299,7 +234,7 @@ func TestRecorder_TransactionsCommitAndRollback(t *testing.T) {
 	assert.Equal(t, 0, len(rec.inner.transactions))
 
 	storageProof := rec.StorageProof()
-	memDB := ptrie.ToMemoryDB[hash.H256, runtime.BlakeTwo256](storageProof)
+	memDB := ptrie.NewMemoryDBFromStorageProof[hash.H256, runtime.BlakeTwo256](storageProof)
 
 	// Check that we recorded the required data
 	trieDB := triedb.NewTrieDB[hash.H256, runtime.BlakeTwo256](root, memDB)

@@ -11,16 +11,14 @@ import (
 	"github.com/ChainSafe/gossamer/pkg/trie/triedb"
 )
 
-// / Stores all the information per transaction.
+// Stores all the information per transaction.
 type transaction[H comparable] struct {
-	/// Stores transaction information about [`RecorderInner::recorded_keys`].
-	///
-	/// For each transaction we only store the `storage_root` and the old states per key. `None`
-	/// state means that the key wasn't recorded before.
+	// Stores transaction information about recorder keys.
+	// For each transaction we only store the storage root and the old states per key.
+	// nil map entry means that the key wasn't recorded before.
 	recordedKeys map[H]map[string]*triedb.RecordedForKey
-	/// Stores transaction information about [`RecorderInner::accessed_nodes`].
-	///
-	/// For each transaction we only store the hashes of added nodes.
+	// Stores transaction information about accessed nodes.
+	// For each transaction we only store the hashes of added nodes.
 	accessedNodes map[H]bool
 }
 
@@ -31,18 +29,14 @@ func newTransaction[H comparable]() transaction[H] {
 	}
 }
 
-// / The internals of [`Recorder`].
+// The internals of [Recorder].
 type recorderInner[H comparable] struct {
-	/// The keys for that we have recorded the trie nodes and if we have recorded up to the value.
-	///
-	/// Mapping: `StorageRoot -> (Key -> RecordedForKey)`.
+	// The keys for that we have recorded the trie nodes and if we have recorded up to the value.
 	recordedKeys map[H]map[string]triedb.RecordedForKey
-	/// Currently active transactions.
+	// Currently active transactions.
 	transactions []transaction[H]
 
-	/// The encoded nodes we accessed while recording.
-	///
-	/// Mapping: `Hash(Node) -> Node`.
+	// The encoded nodes we accessed while recording.
 	accessedNodes map[H][]byte
 }
 
@@ -54,29 +48,26 @@ func newRecorderInner[H comparable]() recorderInner[H] {
 	}
 }
 
-// / The trie recorder.
-// /
-// / It can be used to record accesses to the trie and then to convert them into a [`StorageProof`].
+// Recorder is be used to record accesses to the trie and then to convert them into a [StorageProof].
 type Recorder[H runtime.Hash] struct {
 	inner    recorderInner[H]
 	innerMtx sync.Mutex
-	/// The estimated encoded size of the storage proof this recorder will produce.
-	///
-	/// We store this in an atomic to be able to fetch the value while the `inner` is may locked.
-	encodedSizeEstimation uint
+	// The estimated encoded size of the storage proof this recorder will produce.
+	encodedSizeEstimation    uint
+	encodedSizeEstimationMtx sync.Mutex
 }
 
+// Constructor for [Recorder].
 func NewRecorder[H runtime.Hash]() *Recorder[H] {
 	return &Recorder[H]{
 		inner: newRecorderInner[H](),
 	}
 }
 
-// / Returns the recorder as [`TrieRecorder`](trie_db::TrieRecorder) compatible type.
-// /
-// / - `storage_root`: The storage root of the trie for which accesses are recorded. This is
-// /   important when recording access to different tries at once (like top and child tries).
-// /
+// Returns the recorder as an implementation of [triedb.TrieRecorder].
+//
+// The storage root supplied is of the trie for which accesses are recorded.
+// This is important when recording access to different tries at once (like top and child tries).
 func (r *Recorder[H]) TrieRecorder(storageRoot H) triedb.TrieRecorder {
 	return &trieRecorder[H]{
 		inner:                 &r.inner,
@@ -86,14 +77,14 @@ func (r *Recorder[H]) TrieRecorder(storageRoot H) triedb.TrieRecorder {
 	}
 }
 
-// / Drain the recording into a [`StorageProof`].
-// /
-// / While a recorder can be cloned, all share the same internal state. After calling this
-// / function, all other instances will have their internal state reset as well.
-// /
-// / If you don't want to drain the recorded state, use [`Self::to_storage_proof`].
-// /
-// / Returns the [`StorageProof`].
+// Drain the recording into a [StorageProof].
+//
+// While a recorder can be cloned, all share the same internal state. After calling this
+// function, all other instances will have their internal state reset as well.
+//
+// If you don't want to drain the recorded state, use [Recorder.StorageProof()].
+//
+// Returns a [StorageProof].
 func (r *Recorder[H]) DrainStorageProof() trie.StorageProof {
 	r.innerMtx.Lock()
 	defer r.innerMtx.Unlock()
@@ -113,51 +104,51 @@ func (r *Recorder[H]) storageProof() trie.StorageProof {
 	return trie.NewStorageProof(values)
 }
 
-// / Convert the recording to a [`StorageProof`].
-// /
-// / In contrast to [`Self::drain_storage_proof`] this doesn't consumes and doesn't clears the
-// / recordings.
-// /
-// / Returns the [`StorageProof`].
+// Convert the recording to a [StorageProof].
+//
+// In contrast to [Recorder.DrainStorageProof] this doesn't consume and clear the
+// recordings.
+//
+// Returns a [StorageProof].
 func (r *Recorder[H]) StorageProof() trie.StorageProof {
 	r.innerMtx.Lock()
 	defer r.innerMtx.Unlock()
 	return r.storageProof()
 }
 
-// / Returns the estimated encoded size of the proof.
-// /
-// / The estimation is based on all the nodes that were accessed until now while
-// / accessing the trie.
+// Returns the estimated encoded size of the proof.
+//
+// The estimation is based on all the nodes that were accessed until now while
+// accessing the trie.
 func (r *Recorder[H]) EstimateEncodedSize() uint {
 	return r.encodedSizeEstimation
 }
 
-// / Reset the state.
-// /
-// / This discards all recorded data.
+// Reset the state.
+//
+// This discards all recorded data.
 func (r *Recorder[H]) Reset() {
 	r.innerMtx.Lock()
 	defer r.innerMtx.Unlock()
 	r.inner = newRecorderInner[H]()
 }
 
-// / Start a new transaction.
+// Start a new transaction.
 func (r *Recorder[H]) StartTransaction() {
 	r.innerMtx.Lock()
 	defer r.innerMtx.Unlock()
 	r.inner.transactions = append(r.inner.transactions, newTransaction[H]())
 }
 
-// / Rollback the latest transaction.
-// /
-// / Returns an error if there wasn't any active transaction.
+// Rollback the latest transaction.
+//
+// Returns an error if there wasn't any active transaction.
 func (r *Recorder[H]) RollBackTransaction() error {
 	r.innerMtx.Lock()
 	defer r.innerMtx.Unlock()
-
-	// We locked `inner` and can just update the encoded size locally and then store it back to
-	// the atomic.
+	r.encodedSizeEstimationMtx.Lock()
+	defer r.encodedSizeEstimationMtx.Unlock()
+	// We locked everything and can just update the encoded size locally and then store it back
 	newEncodedSizeEstimation := r.encodedSizeEstimation
 	if len(r.inner.transactions) == 0 {
 		return fmt.Errorf("no transactions to roll back")
@@ -165,7 +156,7 @@ func (r *Recorder[H]) RollBackTransaction() error {
 	tx := r.inner.transactions[len(r.inner.transactions)-1]
 	r.inner.transactions = r.inner.transactions[:len(r.inner.transactions)-1]
 
-	for n, _ := range tx.accessedNodes {
+	for n := range tx.accessedNodes {
 		old, ok := r.inner.accessedNodes[n]
 		if ok {
 			delete(r.inner.accessedNodes, n)
@@ -202,9 +193,9 @@ func (r *Recorder[H]) RollBackTransaction() error {
 	return nil
 }
 
-// / Commit the latest transaction.
-// /
-// / Returns an error if there wasn't any active transaction.
+// Commit the latest transaction.
+//
+// Returns an error if there wasn't any active transaction.
 func (r *Recorder[H]) CommitTransaction() error {
 	r.innerMtx.Lock()
 	defer r.innerMtx.Unlock()
@@ -237,7 +228,7 @@ func (r *Recorder[H]) CommitTransaction() error {
 	return nil
 }
 
-// / The [`TrieRecorder`](trie_db::TrieRecorder) implementation.
+// The [triedb.TrieRecorder] implementation.
 type trieRecorder[H runtime.Hash] struct {
 	inner                 *recorderInner[H]
 	innerMtx              *sync.Mutex
@@ -245,6 +236,7 @@ type trieRecorder[H runtime.Hash] struct {
 	encodedSizeEstimation *uint
 }
 
+// Update the recorded keys entry for the given fullKey.
 func (tr *trieRecorder[H]) updateRecordedKeys(fullKey []byte, access triedb.RecordedForKey) {
 	_, ok := tr.inner.recordedKeys[tr.storageRoot]
 	if !ok {
@@ -253,8 +245,8 @@ func (tr *trieRecorder[H]) updateRecordedKeys(fullKey []byte, access triedb.Reco
 	key := string(fullKey)
 	_, ok = tr.inner.recordedKeys[tr.storageRoot][key]
 
-	// We don't need to update the record if we only accessed the `Hash` for the given
-	// `full_key`. Only `Value` access can be an upgrade from `Hash`.
+	// We don't need to update the record if we only accessed the hash for the given
+	// fullKey.
 	switch access {
 	case triedb.RecordedValue:
 		if ok {
@@ -342,7 +334,7 @@ func (tr *trieRecorder[H]) Record(access triedb.TrieAccess) {
 		tr.updateRecordedKeys(access.FullKey, triedb.RecordedValue)
 	case triedb.HashAccess:
 		log.Printf("TRACE: Recorded hash access for key: %s", access.FullKey)
-		// We don't need to update the `encoded_size_update` as the hash was already
+		// We don't need to update the encodedSizeUpdate as the hash was already
 		// accounted for by the recorded node that holds the hash.
 		tr.updateRecordedKeys(access.FullKey, triedb.RecordedHash)
 	case triedb.NonExistingNodeAccess:

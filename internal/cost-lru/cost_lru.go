@@ -7,6 +7,7 @@ import (
 	"github.com/elastic/go-freelru"
 )
 
+// LRU is a cost based LRU wrapped around [freelru.LRU].
 type LRU[K comparable, V any] struct {
 	currentCost     uint
 	maxCost         uint
@@ -15,6 +16,7 @@ type LRU[K comparable, V any] struct {
 	*freelru.LRU[K, V]
 }
 
+// Costructor for [LRU].
 func New[K comparable, V any](maxCost uint, hash freelru.HashKeyCallback[K], costFunc func(K, V) uint32) (*LRU[K, V], error) {
 	var capacity = uint32(math.MaxUint32)
 	if maxCost < math.MaxUint32 {
@@ -89,4 +91,8 @@ func (l *LRU[K, V]) SetOnEvict(onEvict freelru.OnEvictCallback[K, V]) {
 
 func (l *LRU[K, V]) Cost() uint {
 	return l.currentCost
+}
+
+func (l *LRU[K, V]) MaxCost() uint {
+	return l.maxCost
 }

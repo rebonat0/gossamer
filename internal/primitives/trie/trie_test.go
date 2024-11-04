@@ -6,5 +6,5 @@ import (
 )
 
 var (
-	_ hashdb.HashDB[hash.H256] = &KeySpacedDB[hash.H256]{}
+	_ hashdb.HashDB[hash.H256] = &KeyspacedDB[hash.H256]{}
 )

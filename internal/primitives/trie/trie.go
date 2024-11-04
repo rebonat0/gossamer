@@ -9,48 +9,43 @@ import (
 	triedb "github.com/ChainSafe/gossamer/pkg/trie/triedb"
 )
 
-// / Reexport from `hash_db`, with genericity set for `Hasher` trait.
-// / This uses a `KeyFunction` for prefixing keys internally (avoiding
-// / key conflict for non random keys).
-// pub type PrefixedMemoryDB<H> = memory_db::MemoryDB<H, memory_db::PrefixedKey<H>, trie_db::DBValue>;
+// Reexport from [memorydb.MemoryDB] where supplied [memorydb.KeyFunction] is [memorydb.PrefixedKey] for prefixing
+// keys internally (avoiding key conflict for non random keys).
 type PrefixedMemoryDB[Hash runtime.Hash, Hasher hashdb.Hasher[Hash]] struct {
 	memorydb.MemoryDB[Hash, Hasher, string, memorydb.PrefixedKey[Hash]]
 }
 
+// Constructor for [PrefixedMemoryDB]
 func NewPrefixedMemoryDB[Hash runtime.Hash, Hasher hashdb.Hasher[Hash]]() *PrefixedMemoryDB[Hash, Hasher] {
 	return &PrefixedMemoryDB[Hash, Hasher]{
 		memorydb.NewMemoryDB[Hash, Hasher, string, memorydb.PrefixedKey[Hash]]([]byte{0}),
 	}
 }
 
-// / Reexport from `hash_db`, with genericity set for `Hasher` trait.
-// / This uses a noops `KeyFunction` (key addressing must be hashed or using
-// / an encoding scheme that avoid key conflict).
-// pub type MemoryDB<H> = memory_db::MemoryDB<H, memory_db::HashKey<H>, trie_db::DBValue>;
+// Reexport from [memorydb.MemoryDB] where supplied [memorydb.KeyFunction] is [memorydb.HashKey] which is a noop
+// operation on the supplied prefix, and only uses the hash.
 type MemoryDB[Hash runtime.Hash, Hasher runtime.Hasher[Hash]] struct {
 	memorydb.MemoryDB[Hash, Hasher, Hash, memorydb.HashKey[Hash]]
 }
 
+// Constructor for [MemoryDB].
 func NewMemoryDB[Hash runtime.Hash, Hasher runtime.Hasher[Hash]]() *MemoryDB[Hash, Hasher] {
 	return &MemoryDB[Hash, Hasher]{
 		MemoryDB: memorydb.NewMemoryDB[Hash, Hasher, Hash, memorydb.HashKey[Hash]]([]byte{0}),
 	}
 }
 
-// pub type TrieHash<L> = <<L as TrieLayout>::Hash as Hasher>::Out;
+// KeyValue is a byte slice for key and value, where the value can be optional (nil).
+type KeyValue struct {
+	Key   []byte
+	Value []byte
+}
 
-// / Builder for creating a [`TrieDB`].
-// pub type TrieDBBuilder<'a, 'cache, L> = trie_db::TrieDBBuilder<'a, 'cache, L>;
-// type TrieDBBuilder[Hash, DB, Cache, Layout any] triedb.TrieDBBuilder[Hash, DB, Cache, Layout]
-
-// / Determine a trie root given a hash DB and delta values.
+// Determine a trie root given a hash DB and delta values.
 func DeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
 	db hashdb.HashDB[H],
 	root H,
-	delta []struct {
-		Key   []byte
-		Value []byte
-	},
+	delta []KeyValue,
 	recorder triedb.TrieRecorder,
 	cache triedb.TrieCache[H],
 	stateVersion triedb.TrieLayout,
@@ -58,13 +53,7 @@ func DeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
 	trieDB := triedb.NewTrieDB[H, Hasher](root, db, triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
 	trieDB.SetVersion(stateVersion)
 
-	slices.SortStableFunc(delta, func(a struct {
-		Key   []byte
-		Value []byte
-	}, b struct {
-		Key   []byte
-		Value []byte
-	}) int {
+	slices.SortStableFunc(delta, func(a KeyValue, b KeyValue) int {
 		if string(a.Key) < string(b.Key) {
 			return -1
 		} else if string(a.Key) == string(b.Key) {
@@ -93,7 +82,7 @@ func DeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
 	return hash, err
 }
 
-// / Read a value from the trie.
+// Read a value from the trie.
 func ReadTrieValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	db hashdb.HashDB[H],
 	root H,
@@ -114,7 +103,7 @@ func ReadTrieValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	return nil, nil
 }
 
-// / Read a value from the trie with given Query.
+// Read a value from the trie with given [triedb.Query].
 func ReadTrieValueWith[H runtime.Hash, Hasher runtime.Hasher[H]](
 	db hashdb.HashDB[H],
 	root H,
@@ -136,8 +125,8 @@ func ReadTrieValueWith[H runtime.Hash, Hasher runtime.Hasher[H]](
 	return nil, nil
 }
 
-// / Read the [`trie_db::MerkleValue`] of the node that is the closest descendant for
-// / the provided key.
+// Read the [triedb.MerkleValue] of the node that is the closest descendant for
+// the provided key.
 func ReadTrieFirstDescendantValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	db hashdb.HashDB[H],
 	root H,
@@ -152,37 +141,33 @@ func ReadTrieFirstDescendantValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	return trieDB.LookupFirstDescendant(key)
 }
 
-// / Determine the empty trie root.
+// EmptyTrieRoot returns the empty trie root.
 func EmptyTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]]() H {
 	hasher := *new(Hasher)
 	root := hasher.Hash([]byte{0})
 	return root
 }
 
-// / Determine the empty child trie root.
+// EmptyChildTrieRoot returns the empty child trie root.
 func EmptyChildTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]]() H {
 	return EmptyTrieRoot[H, Hasher]()
 }
 
-// / Determine a child trie root given a hash DB and delta values. H is the default hasher,
-// / but a generic implementation may ignore this type parameter and use other hashers.
+// ChildDeltaTrieRoot determines a child trie root given a hash DB and delta values.
 func ChildDeltaTrieRoot[H runtime.Hash, Hasher runtime.Hasher[H]](
 	keyspace []byte,
 	db hashdb.HashDB[H],
 	root H,
-	delta []struct {
-		Key   []byte
-		Value []byte
-	},
+	delta []KeyValue,
 	recorder triedb.TrieRecorder,
 	cache triedb.TrieCache[H],
 	stateVersion triedb.TrieLayout,
 ) (H, error) {
-	ksdb := NewKeySpacedDB(db, keyspace)
+	ksdb := NewKeyspacedDB(db, keyspace)
 	return DeltaTrieRoot[H, Hasher](ksdb, root, delta, recorder, cache, stateVersion)
 }
 
-// / Read a value from the child trie.
+// Read a value from the child trie.
 func ReadChildTrieValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	keyspace []byte,
 	db hashdb.HashDB[H],
@@ -192,11 +177,11 @@ func ReadChildTrieValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	cache triedb.TrieCache[H],
 	stateVersion triedb.TrieLayout,
 ) ([]byte, error) {
-	ksdb := NewKeySpacedDB[H](db, keyspace)
+	ksdb := NewKeyspacedDB(db, keyspace)
 	trieDB := triedb.NewTrieDB(
 		root, ksdb, triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
 	trieDB.SetVersion(stateVersion)
-	val, err := triedb.GetWith[H, Hasher, []byte](trieDB, key, func(data []byte) []byte { return data })
+	val, err := triedb.GetWith(trieDB, key, func(data []byte) []byte { return data })
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +191,7 @@ func ReadChildTrieValue[H runtime.Hash, Hasher runtime.Hasher[H]](
 	return nil, nil
 }
 
-// / Read a hash from the child trie.
+// Read a hash from the child trie.
 func ReadChildTrieHash[H runtime.Hash, Hasher runtime.Hasher[H]](
 	keyspace []byte,
 	db hashdb.HashDB[H],
@@ -216,29 +201,48 @@ func ReadChildTrieHash[H runtime.Hash, Hasher runtime.Hasher[H]](
 	cache triedb.TrieCache[H],
 	stateVersion triedb.TrieLayout,
 ) (*H, error) {
-	ksdb := NewKeySpacedDB[H](db, keyspace)
+	ksdb := NewKeyspacedDB(db, keyspace)
 	trieDB := triedb.NewTrieDB(
 		root, ksdb, triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
 	trieDB.SetVersion(stateVersion)
 	return trieDB.GetHash(key)
 }
 
-// / `HashDB` implementation that append a encoded prefix (unique id bytes) in addition to the
-// / prefix of every key value.
-type KeySpacedDB[Hash comparable] struct {
+// Read the [triedb.MerkleValue] of the node that is the closest descendant for
+// the provided child key.
+func ReadChildTrieFirstDescendantValue[H runtime.Hash, Hasher runtime.Hasher[H]](
+	keyspace []byte,
+	db hashdb.HashDB[H],
+	root H,
+	key []byte,
+	recorder triedb.TrieRecorder,
+	cache triedb.TrieCache[H],
+	stateVersion triedb.TrieLayout,
+) (triedb.MerkleValue[H], error) {
+	ksdb := NewKeyspacedDB(db, keyspace)
+	trieDB := triedb.NewTrieDB(
+		root, ksdb, triedb.WithCache[H, Hasher](cache), triedb.WithRecorder[H, Hasher](recorder))
+	trieDB.SetVersion(stateVersion)
+	return trieDB.LookupFirstDescendant(key)
+}
+
+// KeyspacedDB is a [hashdb.HashDB] implementation that appends a keyspace (unique id bytes) in addition to the
+// prefix of every key value.
+type KeyspacedDB[Hash comparable] struct {
 	db       hashdb.HashDB[Hash]
 	keySpace []byte
 }
 
-func NewKeySpacedDB[Hash comparable](db hashdb.HashDB[Hash], ks []byte) *KeySpacedDB[Hash] {
-	return &KeySpacedDB[Hash]{
+// Constructor for [KeyspacedDB]
+func NewKeyspacedDB[Hash comparable](db hashdb.HashDB[Hash], ks []byte) *KeyspacedDB[Hash] {
+	return &KeyspacedDB[Hash]{
 		db:       db,
 		keySpace: ks,
 	}
 }
 
-// / Utility function used to merge some byte data (keyspace) and `prefix` data
-// / before calling key value database primitives.
+// Utility function used to merge some byte data (keyspace) and prefix data
+// before calling key value database primitives.
 func keyspaceAsPrefix(ks []byte, prefix hashdb.Prefix) hashdb.Prefix {
 	result := ks
 	result = append(result, prefix.Key...)
@@ -248,28 +252,28 @@ func keyspaceAsPrefix(ks []byte, prefix hashdb.Prefix) hashdb.Prefix {
 	}
 }
 
-func (tbe *KeySpacedDB[H]) Get(key H, prefix hashdb.Prefix) []byte {
+func (tbe *KeyspacedDB[H]) Get(key H, prefix hashdb.Prefix) []byte {
 	derivedPrefix := keyspaceAsPrefix(tbe.keySpace, prefix)
 	return tbe.db.Get(key, derivedPrefix)
 }
 
-func (tbe *KeySpacedDB[H]) Contains(key H, prefix hashdb.Prefix) bool {
+func (tbe *KeyspacedDB[H]) Contains(key H, prefix hashdb.Prefix) bool {
 	derivedPrefix := keyspaceAsPrefix(tbe.keySpace, prefix)
 	return tbe.db.Contains(key, derivedPrefix)
 }
 
-func (tbe *KeySpacedDB[H]) Insert(prefix hashdb.Prefix, value []byte) H {
+func (tbe *KeyspacedDB[H]) Insert(prefix hashdb.Prefix, value []byte) H {
 	derivedPrefix := keyspaceAsPrefix(tbe.keySpace, prefix)
 	h := tbe.db.Insert(derivedPrefix, value)
 	return h
 }
 
-func (tbe *KeySpacedDB[H]) Emplace(key H, prefix hashdb.Prefix, value []byte) {
+func (tbe *KeyspacedDB[H]) Emplace(key H, prefix hashdb.Prefix, value []byte) {
 	derivedPrefix := keyspaceAsPrefix(tbe.keySpace, prefix)
 	tbe.db.Emplace(key, derivedPrefix, value)
 }
 
-func (tbe *KeySpacedDB[H]) Remove(key H, prefix hashdb.Prefix) {
+func (tbe *KeyspacedDB[H]) Remove(key H, prefix hashdb.Prefix) {
 	derivedPrefix := keyspaceAsPrefix(tbe.keySpace, prefix)
 	tbe.db.Remove(key, derivedPrefix)
 }

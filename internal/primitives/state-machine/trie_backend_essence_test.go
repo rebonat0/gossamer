@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	_ hashdb.HashDB[hash.H256] = &TrieBackendEssence[hash.H256, runtime.BlakeTwo256]{}
+	_ hashdb.HashDB[hash.H256] = &trieBackendEssence[hash.H256, runtime.BlakeTwo256]{}
 	_ hashdb.HashDB[hash.H256] = &ephemeral[hash.H256, runtime.BlakeTwo256]{}
 )
 
@@ -37,7 +37,7 @@ func TestTrieBackendEssence(t *testing.T) {
 
 		}
 		{
-			ksdb := trie.NewKeySpacedDB(mdb, childInfo.Keyspace())
+			ksdb := trie.NewKeyspacedDB(mdb, childInfo.Keyspace())
 			// reuse of root_1 implicitly assert child trie root is same
 			// as top trie (contents must remain the same).
 			trie := triedb.NewEmptyTrieDB[hash.H256, runtime.BlakeTwo256](ksdb)

@@ -15,52 +15,42 @@ import (
 	triedb "github.com/ChainSafe/gossamer/pkg/trie/triedb"
 )
 
-// pub trait TrieCacheProvider<H: Hasher> {
-type TrieCacheProvider[H runtime.Hash, Cache any] interface {
-	// 	/// Cache type that implements [`trie_db::TrieCache`].
-	// 	type Cache<'a>: TrieCacheT<sp_trie::NodeCodec<H>> + 'a
-	// 	where
-	// 		Self: 'a;
-
-	// 	/// Return a [`trie_db::TrieDB`] compatible cache.
-	// 	///
-	// 	/// The `storage_root` parameter *must* be the storage root of the trie this cache is used for.
-	// 	///
-	// 	/// NOTE: Implementors should use the `storage_root` to differentiate between storage keys that
-	// 	/// may belong to different tries.
-	// 	fn as_trie_db_cache(&self, storage_root: H::Out) -> Self::Cache<'_>;
+// A provider of trie caches that are compatible with [triedb.TrieDB].
+type TrieCacheProvider[H runtime.Hash, Cache triedb.TrieCache[H]] interface {
+	// Return a [triedb.TrieDB] compatible cache.
+	//
+	// The storage_root parameter *must* be the storage root of the trie this cache is used for.
+	//
+	// NOTE: Implementors should use the storage_root to differentiate between storage keys that
+	// may belong to different tries.
 	TrieCache(storageRoot H) (cache Cache, unlock func())
 
-	// 	/// Returns a cache that can be used with a [`trie_db::TrieDBMut`].
-	// 	///
-	// 	/// When finished with the operation on the trie, it is required to call [`Self::merge`] to
-	// 	/// merge the cached items for the correct `storage_root`.
-	// 	fn as_trie_db_mut_cache(&self) -> Self::Cache<'_>;
+	// Returns a cache that can be used with a [triedb.TrieDB] where mutations are performed.
+	//
+	// When finished with the operation on the trie, it is required to call [TrieCacheProvider.Merge] to
+	// merge the cached items for the correct storage root.
 	TrieCacheMut() (cache Cache, unlock func())
 
-	// /// Merge the cached data in `other` into the provider using the given `new_root`.
-	// ///
-	// /// This must be used for the cache returned by [`Self::as_trie_db_mut_cache`] as otherwise the
-	// /// cached data is just thrown away.
-	// fn merge<'a>(&'a self, other: Self::Cache<'a>, new_root: H::Out);
+	// Merge the cached data in other into the provider using the given new_root.
+	//
+	// This must be used for the cache returned by [TrieCacheProvivder.TrieCacheMut] as otherwise the
+	// cached data is just thrown away.
 	Merge(other Cache, newRoot H)
 }
 
 type cachedIter[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
 	lastKey []byte
-	iter    RawIter[H, Hasher]
+	iter    rawIter[H, Hasher]
 }
 
-// / Patricia trie-based backend. Transaction type is an overlay of changes to commit.
-// pub struct TrieBackend<S: TrieBackendStorage<H>, H: Hasher, C = DefaultCache<H>> {
+// Patricia trie-based backend. Transaction type is an overlay of changes to commit.
 type TrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]] struct {
-	// pub(crate) essence: TrieBackendEssence<S, H, C>,
-	essence TrieBackendEssence[H, Hasher]
-	// next_storage_key_cache: CacheCell<Option<CachedIter<S, H, C>>>,
+	essence                trieBackendEssence[H, Hasher]
 	nextStorageKeyCache    *cachedIter[H, Hasher]
 	nextStorageKeyCacheMtx sync.Mutex
 }
 
+// Constructor for [TrieBackend].
 func NewTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]](
 	storage TrieBackendStorage[H],
 	root H,
@@ -72,13 +62,13 @@ func NewTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]](
 	}
 }
 
-// / Wrap the given [`TrieBackend`].
-// /
-// / This can be used for example if all accesses to the trie should
-// / be recorded while some other functionality still uses the non-recording
-// / backend.
-// /
-// / The backend storage and the cache will be taken from `other`.
+// Wrap the given [TrieBackend].
+//
+// This can be used for example if all accesses to the trie should
+// be recorded while some other functionality still uses the non-recording
+// backend.
+//
+// The backend storage and the cache will be taken from other.
 func NewWrappedTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]](
 	other *TrieBackend[H, Hasher],
 ) *TrieBackend[H, Hasher] {
@@ -90,13 +80,13 @@ func NewWrappedTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]](
 	)
 }
 
-// / Create a backend used for checking the proof, using `H` as hasher.
-// /
-// / `proof` and `root` must match, i.e. `root` must be the correct root of `proof` nodes.
+// Create a backend used for checking the proof.
+//
+// proof and root must match, i.e. root must be the correct root of proof nodes.
 func NewProofCheckTrieBackend[H runtime.Hash, Hasher runtime.Hasher[H]](
 	root H, proof trie.StorageProof,
 ) (*TrieBackend[H, Hasher], error) {
-	db := trie.ToMemoryDB[H, Hasher](proof)
+	db := trie.NewMemoryDBFromStorageProof[H, Hasher](proof)
 
 	if db.Contains(root, hashdb.EmptyPrefix) {
 		return NewTrieBackend[H, Hasher](HashDBTrieBackendStorage[H]{db}, root, nil, nil), nil
@@ -182,9 +172,7 @@ func (tb *TrieBackend[H, Hasher]) NextStorageKey(key []byte) (StorageKey, error)
 		return nil, nil
 	}
 
-	// cache.lastKey = nil
 	cache.lastKey = nextKey
-
 	return nextKey, nil
 }
 
@@ -196,18 +184,12 @@ func (tb *TrieBackend[H, Hasher]) RawIter(args IterArgs) (StorageIterator[H, Has
 	return tb.essence.RawIter(args)
 }
 
-func (tb *TrieBackend[H, Hasher]) StorageRoot(delta []struct {
-	Key   []byte
-	Value []byte
-}, stateVersion storage.StateVersion) (H, BackendTransaction[H, Hasher]) {
+func (tb *TrieBackend[H, Hasher]) StorageRoot(delta []Delta, stateVersion storage.StateVersion) (H, BackendTransaction[H, Hasher]) {
 	h, pmdb := tb.essence.StorageRoot(delta, stateVersion)
 	return h, BackendTransaction[H, Hasher]{pmdb}
 }
 
-func (tb *TrieBackend[H, Hasher]) ChildStorageRoot(childInfo storage.ChildInfo, delta []struct {
-	Key   []byte
-	Value []byte
-}, stateVersion storage.StateVersion) (H, bool, BackendTransaction[H, Hasher]) {
+func (tb *TrieBackend[H, Hasher]) ChildStorageRoot(childInfo storage.ChildInfo, delta []Delta, stateVersion storage.StateVersion) (H, bool, BackendTransaction[H, Hasher]) {
 	h, b, pmdb := tb.essence.ChildStorageRoot(childInfo, delta, stateVersion)
 	return h, b, BackendTransaction[H, Hasher]{pmdb}
 }
@@ -235,17 +217,8 @@ func (tb *TrieBackend[H, Hasher]) Keys(args IterArgs) (KeysIter[H, Hasher], erro
 }
 
 func (tb *TrieBackend[H, Hasher]) FullStorageRoot(
-	delta []struct {
-		Key   []byte
-		Value []byte
-	},
-	childDeltas []struct {
-		storage.ChildInfo
-		Delta []struct {
-			Key   []byte
-			Value []byte
-		}
-	},
+	delta []Delta,
+	childDeltas []ChildDelta,
 	stateVersion storage.StateVersion,
 ) (H, BackendTransaction[H, Hasher]) {
 	type ChildRoot struct {
@@ -258,9 +231,9 @@ func (tb *TrieBackend[H, Hasher]) FullStorageRoot(
 	// child first
 	for _, cd := range childDeltas {
 		childInfo := cd.ChildInfo
-		childDelta := cd.Delta
+		childDeltas := cd.Deltas
 
-		childRoot, empty, childTxs := tb.ChildStorageRoot(childInfo, childDelta, stateVersion)
+		childRoot, empty, childTxs := tb.ChildStorageRoot(childInfo, childDeltas, stateVersion)
 		prefixedStorageKey := childInfo.PrefixedStorageKey()
 
 		txs.Consolidate(&childTxs.MemoryDB)
@@ -278,10 +251,7 @@ func (tb *TrieBackend[H, Hasher]) FullStorageRoot(
 
 	chainedDelta := delta
 	for _, cr := range childRoots {
-		chainedDelta = append(chainedDelta, struct {
-			Key   []byte
-			Value []byte
-		}{
+		chainedDelta = append(chainedDelta, Delta{
 			Key:   cr.StorageKey,
 			Value: cr.EncodedChildRoot,
 		})
