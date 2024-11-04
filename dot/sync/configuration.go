@@ -13,17 +13,6 @@ func WithStrategies(currentStrategy, defaultStrategy Strategy) ServiceConfig {
 	return func(svc *SyncService) {
 		svc.currentStrategy = currentStrategy
 		svc.defaultStrategy = defaultStrategy
-
-		wpCapacity := currentStrategy.NumOfTasks()
-		if defaultStrategy != nil {
-			wpCapacity = max(currentStrategy.NumOfTasks(), defaultStrategy.NumOfTasks())
-		}
-		wpCapacity *= 2 // add some buffer
-
-		svc.workerPool = NewWorkerPool(WorkerPoolConfig{
-			Capacity:   wpCapacity,
-			MaxRetries: UnlimitedRetries,
-		})
 	}
 }
 

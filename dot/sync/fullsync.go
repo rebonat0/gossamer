@@ -180,9 +180,8 @@ func (f *FullSyncStrategy) Process(results <-chan TaskResult) (
 	}
 
 	// This is safe as long as we are the only goroutine reading from the channel.
-	for len(results) > 0 {
+	for result := range results {
 		readyBlocks := make([][]*types.BlockData, 0)
-		result := <-results
 		repChange, ignorePeer, validResp := validateResult(result, f.badBlocks)
 
 		if repChange != nil {
@@ -440,9 +439,9 @@ type RequestResponseData struct {
 func validateResult(result TaskResult, badBlocks []string) (repChange *Change,
 	blockPeer bool, validRes *RequestResponseData) {
 
-	if !result.Completed {
-		return
-	}
+	//if !result.Completed {
+	//	return
+	//}
 
 	task, ok := result.Task.(*syncTask)
 	if !ok {

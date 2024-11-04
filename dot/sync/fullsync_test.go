@@ -205,8 +205,7 @@ func TestFullSyncProcess(t *testing.T) {
 						messages.BootstrapRequestData, messages.Ascending),
 					requestMaker: requestMaker,
 				},
-				Completed: true,
-				Result:    fstTaskBlockResponse,
+				Result: fstTaskBlockResponse,
 			},
 			// there is gap from 11 -> 128
 			// second task
@@ -218,8 +217,7 @@ func TestFullSyncProcess(t *testing.T) {
 						messages.BootstrapRequestData, messages.Ascending),
 					requestMaker: requestMaker,
 				},
-				Completed: true,
-				Result:    sndTaskBlockResponse,
+				Result: sndTaskBlockResponse,
 			},
 		}
 
@@ -292,8 +290,7 @@ func TestFullSyncProcess(t *testing.T) {
 				request:      expectedAncestorRequest,
 				requestMaker: requestMaker,
 			},
-			Completed: true,
-			Result:    ancestorSearchResponse,
+			Result: ancestorSearchResponse,
 		}
 
 		done, _, _, err = fs.Process(results)

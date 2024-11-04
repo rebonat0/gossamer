@@ -24,7 +24,6 @@ import (
 const (
 	waitPeersDefaultTimeout = 10 * time.Second
 	minPeersDefault         = 1
-	maxTaskRetries          = 5
 )
 
 var (
@@ -93,7 +92,6 @@ type Strategy interface {
 	Process(results <-chan TaskResult) (done bool, repChanges []Change, blocks []peer.ID, err error)
 	ShowMetrics()
 	IsSynced() bool
-	NumOfTasks() int
 }
 
 type SyncService struct {
@@ -121,7 +119,7 @@ func NewSyncService(cfgs ...ServiceConfig) *SyncService {
 		waitPeersDuration:     waitPeersDefaultTimeout,
 		stopCh:                make(chan struct{}),
 		seenBlockSyncRequests: lrucache.NewLRUCache[common.Hash, uint](100),
-		workerPool:            nil,
+		workerPool:            NewWorkerPool(),
 	}
 
 	for _, cfg := range cfgs {
@@ -138,7 +136,7 @@ func (s *SyncService) waitWorkers() {
 	}
 
 	for {
-		total := s.workerPool.NumPeers()
+		total := s.workerPool.IdlePeers()
 		if total >= s.minPeers {
 			return
 		}
@@ -175,11 +173,7 @@ func (s *SyncService) Stop() error {
 
 func (s *SyncService) HandleBlockAnnounceHandshake(from peer.ID, msg *network.BlockAnnounceHandshake) error {
 	logger.Infof("receiving a block announce handshake from %s", from.String())
-	logger.Infof("len(s.workerPool.Results())=%d", len(s.workerPool.Results())) // TODO: remove
-	if err := s.workerPool.AddPeer(from); err != nil {
-		logger.Warnf("failed to add peer to worker pool: %s", err)
-		return err
-	}
+	s.workerPool.AddPeer(from)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -203,9 +197,7 @@ func (s *SyncService) HandleBlockAnnounce(from peer.ID, msg *network.BlockAnnoun
 	return nil
 }
 
-func (s *SyncService) OnConnectionClosed(who peer.ID) {
-	logger.Tracef("removing peer worker: %s", who.String())
-	s.workerPool.RemovePeer(who)
+func (s *SyncService) OnConnectionClosed(_ peer.ID) {
 }
 
 func (s *SyncService) IsSynced() bool {
@@ -268,26 +260,27 @@ func (s *SyncService) runStrategy() {
 	logger.Infof(
 		"🚣 currently syncing, %d peers connected, %d peers in the worker pool, finalized #%d (%s), best #%d (%s)",
 		len(s.network.AllConnectedPeersIDs()),
-		s.workerPool.NumPeers(),
+		s.workerPool.IdlePeers(),
 		finalisedHeader.Number,
 		finalisedHeader.Hash().Short(),
 		bestBlockHeader.Number,
 		bestBlockHeader.Hash().Short(),
 	)
 
-	if s.workerPool.Capacity() > s.currentStrategy.NumOfTasks() {
-		tasks, err := s.currentStrategy.NextActions()
-		if err != nil {
-			logger.Criticalf("current sync strategy next actions failed with: %s", err.Error())
-			return
-		}
+	tasks, err := s.currentStrategy.NextActions()
+	if err != nil {
+		logger.Criticalf("current sync strategy next actions failed with: %s", err.Error())
+		return
+	}
 
-		logger.Tracef("amount of tasks to process: %d", len(tasks))
-		if len(tasks) == 0 {
-			return
-		}
+	logger.Tracef("amount of tasks to process: %d", len(tasks))
+	if len(tasks) == 0 {
+		return
+	}
 
-		_ = s.workerPool.SubmitBatch(tasks)
+	if err := s.workerPool.SubmitBatch(tasks); err != nil {
+		logger.Debugf("unable to submit tasks to worker pool: %v", err)
+		return
 	}
 
 	done, repChanges, peersToIgnore, err := s.currentStrategy.Process(s.workerPool.Results())
