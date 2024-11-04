@@ -697,11 +697,11 @@ func TestTrieBackend(t *testing.T) {
 		}
 	})
 
-	/// This tests an edge case when recording a child trie access with a cache.
-	///
-	/// The accessed value/node is in the cache, but not the nodes to get to this value. So,
-	/// the recorder will need to traverse the trie to access these nodes from the backend when the
-	/// storage proof is generated.
+	// This tests an edge case when recording a child trie access with a cache.
+	//
+	// The accessed value/node is in the cache, but not the nodes to get to this value. So,
+	// the recorder will need to traverse the trie to access these nodes from the backend when the
+	// storage proof is generated.
 	t.Run("child_proof_recording_with_edge_cases_works", func(t *testing.T) {
 		for _, stateVersion := range []storage.StateVersion{storage.StateVersionV0, storage.StateVersionV1} {
 			childInfo1 := storage.NewDefaultChildInfo([]byte("sub1"))
@@ -863,12 +863,12 @@ func TestTrieBackend(t *testing.T) {
 		}
 	})
 
-	/// Test to ensure that recording the same `key` for different tries works as expected.
-	///
-	/// Each trie stores a different value under the same key. The values are big enough to
-	/// be not inlined with `StateVersion::V1`, this is important to test the expected behavior. The
-	/// trie recorder is expected to differentiate key access based on the different storage roots
-	/// of the tries.
+	// Test to ensure that recording the same `key` for different tries works as expected.
+	//
+	// Each trie stores a different value under the same key. The values are big enough to
+	// be not inlined with `StateVersion::V1`, this is important to test the expected behavior. The
+	// trie recorder is expected to differentiate key access based on the different storage roots
+	// of the tries.
 	t.Run("recording_same_key_access_in_different_tries", func(t *testing.T) {
 		for _, stateVersion := range []storage.StateVersion{storage.StateVersionV0, storage.StateVersionV1} {
 			key := []byte("test_key")

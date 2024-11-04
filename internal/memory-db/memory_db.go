@@ -21,7 +21,7 @@ type Value interface {
 	~[]byte
 }
 
-// / Reference-counted memory-based [hashdb.HashDB] implementation.
+// Reference-counted memory-based [hashdb.HashDB] implementation.
 type MemoryDB[H Hash, Hasher hashdb.Hasher[H], Key constraints.Ordered, KF KeyFunction[H, Key]] struct {
 	data           map[Key]dataRC
 	hashedNullNode H
@@ -53,7 +53,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF]) Clone() MemoryDB[H, Hasher, Key, KF] {
 	}
 }
 
-// / Purge all zero-referenced data from the database.
+// Purge all zero-referenced data from the database.
 func (mdb *MemoryDB[H, Hasher, Key, KF]) Purge() {
 	for k, val := range mdb.data {
 		if val.RC == 0 {
@@ -62,18 +62,18 @@ func (mdb *MemoryDB[H, Hasher, Key, KF]) Purge() {
 	}
 }
 
-// / Return the internal key-value Map, clearing the current state.
+// Return the internal key-value Map, clearing the current state.
 func (mdb *MemoryDB[H, Hasher, Key, KF]) Drain() map[Key]dataRC {
 	data := mdb.data
 	mdb.data = make(map[Key]dataRC)
 	return data
 }
 
-// / Grab the raw information associated with a key. Returns None if the key
-// / doesn't exist.
-// /
-// / Even when Some is returned, the data is only guaranteed to be useful
-// / when the refs > 0.
+// Grab the raw information associated with a key. Returns None if the key
+// doesn't exist.
+//
+// Even when Some is returned, the data is only guaranteed to be useful
+// when the refs > 0.
 func (mdb *MemoryDB[H, Hasher, Key, KF]) raw(key H, prefix hashdb.Prefix) *dataRC {
 	if key == mdb.hashedNullNode {
 		return &dataRC{mdb.nullNodeData, 1}
@@ -86,7 +86,7 @@ func (mdb *MemoryDB[H, Hasher, Key, KF]) raw(key H, prefix hashdb.Prefix) *dataR
 	return nil
 }
 
-// / Consolidate all the entries of other into self.
+// Consolidate all the entries of other into self.
 func (mdb *MemoryDB[H, Hasher, Key, KF]) Consolidate(other *MemoryDB[H, Hasher, Key, KF]) {
 	for key, value := range other.Drain() {
 		entry, ok := mdb.data[key]
@@ -106,8 +106,8 @@ func (mdb *MemoryDB[H, Hasher, Key, KF]) Consolidate(other *MemoryDB[H, Hasher, 
 	}
 }
 
-// / Remove an element and delete it from storage if reference count reaches zero.
-// / If the value was purged, return the old value.
+// Remove an element and delete it from storage if reference count reaches zero.
+// If the value was purged, return the old value.
 func (mdb *MemoryDB[H, Hasher, Key, KF]) removeAndPurge(key H, prefix hashdb.Prefix) []byte {
 	if key == mdb.hashedNullNode {
 		return nil
@@ -214,21 +214,21 @@ type KeyFunction[Hash constraints.Ordered, Key any] interface {
 	Key(hash Hash, prefix hashdb.Prefix) Key
 }
 
-// / Key function that only uses the hash
+// Key function that only uses the hash
 type HashKey[H Hash] struct{}
 
 func (HashKey[Hash]) Key(hash Hash, prefix hashdb.Prefix) Hash {
 	return hash
 }
 
-// / Key function that concatenates prefix and hash.
+// Key function that concatenates prefix and hash.
 type PrefixedKey[H Hash] struct{}
 
 func (PrefixedKey[H]) Key(key H, prefix hashdb.Prefix) string {
 	return string(NewPrefixedKey(key, prefix))
 }
 
-// / Derive a database key from hash value of the node (key) and the node prefix.
+// Derive a database key from hash value of the node (key) and the node prefix.
 func NewPrefixedKey[H Hash](key H, prefix hashdb.Prefix) []byte {
 	prefixedKey := prefix.Key
 	if prefix.Padded != nil {

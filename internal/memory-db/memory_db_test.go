@@ -14,10 +14,10 @@ var (
 	_ KeyFunction[hash.H256, string]    = PrefixedKey[hash.H256]{}
 )
 
-// / Blake2-256 Hash implementation.
+// Blake2-256 Hash implementation.
 type Keccak256 struct{}
 
-// / Produce the hash of some byte-slice.
+// Produce the hash of some byte-slice.
 func (k256 Keccak256) Hash(s []byte) hash.H256 {
 	h := hashing.Keccak256(s)
 	return hash.H256(h[:])
