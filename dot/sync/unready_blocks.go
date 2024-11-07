@@ -109,7 +109,6 @@ func (u *unreadyBlocks) newDisjointFragment(frag *Fragment) {
 
 // updateDisjointFragments given a set of blocks check if it
 // connects to a disjoint fragment, and returns a ne fragment
-// containing both fragments concatenated, removes the old one if not pinned
 func (u *unreadyBlocks) updateDisjointFragment(chain *Fragment) (*Fragment, bool) {
 	u.mtx.Lock()
 	defer u.mtx.Unlock()
