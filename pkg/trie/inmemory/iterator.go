@@ -6,6 +6,7 @@ package inmemory
 import (
 	"bytes"
 	"fmt"
+	"iter"
 
 	"github.com/ChainSafe/gossamer/pkg/trie"
 	"github.com/ChainSafe/gossamer/pkg/trie/codec"
@@ -46,7 +47,7 @@ func NewInMemoryTrieIterator(opts ...IterOpts) *InMemoryTrieIterator {
 	return iter
 }
 
-func (t *InMemoryTrieIterator) NextEntry() *trie.Entry {
+func (t *InMemoryTrieIterator) nextEntry() *trie.Entry {
 	found := findNextNode(t.trie.root, []byte(nil), t.cursorAtKey)
 	if found != nil {
 		t.cursorAtKey = found.Key
@@ -55,28 +56,11 @@ func (t *InMemoryTrieIterator) NextEntry() *trie.Entry {
 }
 
 func (t *InMemoryTrieIterator) NextKey() []byte {
-	entry := t.NextEntry()
+	entry := t.nextEntry()
 	if entry != nil {
 		return codec.NibblesToKeyLE(entry.Key)
 	}
 	return nil
-}
-
-// NextKeyFunc advance the iterator until the predicate condition meets
-func (t *InMemoryTrieIterator) NextKeyFunc(predicate func(nextKey []byte) bool) (nextKey []byte) {
-	for entry := t.NextEntry(); entry != nil; entry = t.NextEntry() {
-		key := codec.NibblesToKeyLE(entry.Key)
-		if predicate(key) {
-			return key
-		}
-	}
-	return nil
-}
-
-func (t *InMemoryTrieIterator) Seek(targetKey []byte) {
-	t.NextKeyFunc(func(nextKey []byte) bool {
-		return bytes.Compare(nextKey, targetKey) >= 0
-	})
 }
 
 // Entries returns all the key-value pairs in the trie as a map of keys to values
@@ -85,6 +69,37 @@ func (t *InMemoryTrie) Entries() (keyValueMap map[string][]byte) {
 	keyValueMap = make(map[string][]byte)
 	t.buildEntriesMap(t.root, nil, keyValueMap)
 	return keyValueMap
+}
+
+// KeysFrom returns an iterator over all keys in the trie that are greater than the given key.
+func (t *InMemoryTrie) KeysFrom(key []byte) iter.Seq[[]byte] {
+	iter := NewInMemoryTrieIterator(WithTrie(t), WithCursorAt(codec.KeyLEToNibbles(key)))
+
+	return func(yield func([]byte) bool) {
+		for key := iter.NextKey(); key != nil; key = iter.NextKey() {
+			if !yield(key) {
+				return
+			}
+		}
+	}
+}
+
+// PrefixedKeys returns an iterator over all keys in the trie that have the given prefix.
+func (t *InMemoryTrie) PrefixedKeys(prefix []byte) iter.Seq[[]byte] {
+	iter := NewInMemoryTrieIterator(WithTrie(t), WithCursorAt(codec.KeyLEToNibbles(prefix)))
+
+	return func(yield func([]byte) bool) {
+		// Return same prefix as first key if it's present in trie
+		if t.Get(prefix) != nil && !yield(prefix) {
+			return
+		}
+
+		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+			if !yield(key) {
+				return
+			}
+		}
+	}
 }
 
 // NextKey returns the next key in the trie in lexicographic order.

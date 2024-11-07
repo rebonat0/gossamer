@@ -77,9 +77,12 @@ type Service struct {
 	bestFinalCandidate map[uint64]*Vote // map of round number -> best final candidate
 
 	// channels for communication with other services
-	finalisedCh chan *types.FinalisationInfo
+	finalisedCh     chan *types.FinalisationInfo
+	neighborMsgChan chan neighborData
 
 	telemetry Telemetry
+
+	neighborTracker *neighborTracker
 }
 
 // Config represents a GRANDPA service configuration
@@ -130,6 +133,8 @@ func NewService(cfg *Config) (*Service, error) {
 		cfg.Interval = defaultGrandpaInterval
 	}
 
+	neighborMsgChan := make(chan neighborData)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Service{
 		ctx:                ctx,
@@ -151,7 +156,10 @@ func NewService(cfg *Config) (*Service, error) {
 		finalisedCh:        finalisedCh,
 		interval:           cfg.Interval,
 		telemetry:          cfg.Telemetry,
+		neighborMsgChan:    neighborMsgChan,
 	}
+
+	s.neighborTracker = newNeighborTracker(s, neighborMsgChan)
 
 	if err := s.registerProtocol(); err != nil {
 		return nil, err
@@ -165,6 +173,8 @@ func NewService(cfg *Config) (*Service, error) {
 
 // Start begins the GRANDPA finality service
 func (s *Service) Start() error {
+	s.neighborTracker.Start()
+
 	// if we're not an authority, we don't need to worry about the voting process.
 	// the grandpa service is only used to verify incoming block justifications
 	if !s.authority {
@@ -190,6 +200,9 @@ func (s *Service) Stop() error {
 
 	s.cancel()
 	s.blockState.FreeFinalisedNotifierChannel(s.finalisedCh)
+
+	s.neighborTracker.Stop()
+	close(s.neighborTracker.neighborMsgChan)
 
 	if !s.authority {
 		return nil
@@ -1146,6 +1159,7 @@ func (s *Service) handleCommitMessage(commitMessage *CommitMessage) error {
 		commitMessage.Vote.Hash, uint(commitMessage.Vote.Number))
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
+			logger.Warnf("Not able to verify, adding commit to tracker")
 			s.tracker.addCommit(commitMessage)
 		}
 

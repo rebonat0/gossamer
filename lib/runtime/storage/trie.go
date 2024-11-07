@@ -188,10 +188,14 @@ func (t *TrieState) NextKey(key []byte) []byte {
 			nextKey = []byte(currentTx.sortedKeys[pos])
 		}
 
-		nextKeyOnState := t.state.PrefixedIter(key).NextKeyFunc(func(nextKey []byte) bool {
-			_, deleted := currentTx.deletes[string(nextKey)]
-			return !deleted
-		})
+		var nextKeyOnState []byte
+		for k := range t.state.KeysFrom(key) {
+			if _, deleted := currentTx.deletes[string(k)]; !deleted {
+				nextKeyOnState = k
+				break
+			}
+		}
+
 		if nextKeyOnState == nil {
 			return nextKey
 		}
@@ -214,8 +218,7 @@ func (t *TrieState) ClearPrefix(prefix []byte) error {
 	if currentTx := t.getCurrentTransaction(); currentTx != nil {
 		keysOnState := make([]string, 0)
 
-		iter := t.state.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range t.state.PrefixedKeys(prefix) {
 			keysOnState = append(keysOnState, string(key))
 		}
 
@@ -235,8 +238,7 @@ func (t *TrieState) ClearPrefixLimit(prefix []byte, limit uint32) (
 	if currentTx := t.getCurrentTransaction(); currentTx != nil {
 		keysOnState := make([]string, 0)
 
-		iter := t.state.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range t.state.PrefixedKeys(prefix) {
 			keysOnState = append(keysOnState, string(key))
 		}
 
@@ -430,8 +432,7 @@ func (t *TrieState) ClearPrefixInChild(keyToChild, prefix []byte) error {
 		}
 
 		var onStateKeys []string
-		iter := child.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range child.PrefixedKeys(prefix) {
 			onStateKeys = append(onStateKeys, string(key))
 		}
 
@@ -466,8 +467,7 @@ func (t *TrieState) ClearPrefixInChildWithLimit(keyToChild, prefix []byte, limit
 		}
 
 		var onStateKeys []string
-		iter := child.PrefixedIter(prefix)
-		for key := iter.NextKey(); bytes.HasPrefix(key, prefix); key = iter.NextKey() {
+		for key := range child.PrefixedKeys(prefix) {
 			onStateKeys = append(onStateKeys, string(key))
 		}
 
@@ -516,10 +516,13 @@ func (t *TrieState) GetChildNextKey(keyToChild, key []byte) ([]byte, error) {
 				return nil, err
 			}
 
-			nextKeyOnState := childTrie.PrefixedIter(key).NextKeyFunc(func(nextKey []byte) bool {
-				_, deleted := childChanges.deletes[string(nextKey)]
-				return !deleted
-			})
+			var nextKeyOnState []byte
+			for k := range childTrie.KeysFrom(key) {
+				if _, deleted := childChanges.deletes[string(k)]; !deleted {
+					nextKeyOnState = k
+					break
+				}
+			}
 
 			if nextKeyOnState == nil {
 				return nextKey, nil
