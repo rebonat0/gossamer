@@ -21,6 +21,7 @@ func NewFragment(chain []*types.BlockData) *Fragment {
 	return &Fragment{chain}
 }
 
+// Filter returns a new fragments with blocks that satisfies the predicate p
 func (f *Fragment) Filter(p func(*types.BlockData) bool) *Fragment {
 	filtered := make([]*types.BlockData, 0, len(f.chain))
 	for _, bd := range f.chain {
@@ -31,7 +32,7 @@ func (f *Fragment) Filter(p func(*types.BlockData) bool) *Fragment {
 	return NewFragment(filtered)
 }
 
-// Find return the first occurrence of a types.BlockData that
+// Find returns the first occurrence of a types.BlockData that
 // satisfies the predicate p
 func (f *Fragment) Find(p func(*types.BlockData) bool) *types.BlockData {
 	for _, bd := range f.chain {
@@ -43,26 +44,7 @@ func (f *Fragment) Find(p func(*types.BlockData) bool) *types.BlockData {
 	return nil
 }
 
-func (f *Fragment) Last() *types.BlockData {
-	if len(f.chain) > 0 {
-		return f.chain[len(f.chain)-1]
-	}
-
-	return nil
-}
-
-func (f *Fragment) Len() int {
-	return len(f.chain)
-}
-
-func (f *Fragment) Iter() iter.Seq[*types.BlockData] {
-	return func(yield func(*types.BlockData) bool) {
-		for _, bd := range f.chain {
-			yield(bd)
-		}
-	}
-}
-
+// Last returns the first block in the fragment or nil otherwise
 func (f *Fragment) First() *types.BlockData {
 	if len(f.chain) > 0 {
 		return f.chain[0]
@@ -71,6 +53,32 @@ func (f *Fragment) First() *types.BlockData {
 	return nil
 }
 
+// Last returns the last block in the fragment or nil otherwise
+func (f *Fragment) Last() *types.BlockData {
+	if len(f.chain) > 0 {
+		return f.chain[len(f.chain)-1]
+	}
+
+	return nil
+}
+
+// Len returns the amount of blocks in the fragment
+func (f *Fragment) Len() int {
+	return len(f.chain)
+}
+
+// Iter returns an iterator of the blocks in the fragment
+// it enables the caller to use range keyword in the Fragment instance
+func (f *Fragment) Iter() iter.Seq[*types.BlockData] {
+	return func(yield func(*types.BlockData) bool) {
+		for _, bd := range f.chain {
+			yield(bd)
+		}
+	}
+}
+
+// Concat returns a new fragment containing the concatenation
+// between this fragment and the given as argument fragment
 func (f *Fragment) Concat(snd *Fragment) *Fragment {
 	return &Fragment{
 		chain: slices.Concat(f.chain, snd.chain),
