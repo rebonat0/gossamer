@@ -153,7 +153,7 @@ func newFullSyncService(t *testing.T) *SyncService {
 		WithBlockState(stateSrvc.Block),
 		WithNetwork(mockNetwork),
 		WithSlotDuration(6 * time.Second),
-		WithFullSyncStrategy(fullSync),
+		WithStrategies(fullSync, nil),
 	}
 
 	syncer := NewSyncService(serviceCfg...)

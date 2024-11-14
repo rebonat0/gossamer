@@ -560,8 +560,7 @@ func (nodeBuilder) newSyncService(config *cfg.Config, st *state.Service, fg sync
 		sync.WithNetwork(net),
 		sync.WithBlockState(st.Block),
 		sync.WithSlotDuration(slotDuration),
-		sync.WithWarpSyncStrategy(warpSyncStrategy),
-		sync.WithFullSyncStrategy(fullSync),
+		sync.WithStrategies(warpSyncStrategy, fullSync),
 		sync.WithMinPeers(config.Network.MinPeers),
 	), nil
 }
