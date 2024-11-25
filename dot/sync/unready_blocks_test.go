@@ -30,7 +30,7 @@ func TestUnreadyBlocks_removeIrrelevantFragments(t *testing.T) {
 			}),
 		}
 
-		ub.pruneDisjointFragments(LowerThanOrEqHighestFinalized(100))
+		ub.pruneDisjointFragments(LowerThanOrEq(100))
 		require.Empty(t, ub.disjointFragments)
 	})
 
@@ -104,7 +104,7 @@ func TestUnreadyBlocks_removeIrrelevantFragments(t *testing.T) {
 		// the first fragment should be removed
 		// the second fragment should have only 2 items
 		// the third frament shold not be affected
-		ub.pruneDisjointFragments(LowerThanOrEqHighestFinalized(253))
+		ub.pruneDisjointFragments(LowerThanOrEq(253))
 		require.Len(t, ub.disjointFragments, 1)
 
 		expectedThirdFragment := NewFragment([]*types.BlockData{
@@ -155,7 +155,7 @@ func TestUnreadyBlocks_removeIrrelevantFragments(t *testing.T) {
 				},
 			}),
 		}
-		ub.pruneDisjointFragments(LowerThanOrEqHighestFinalized(100))
+		ub.pruneDisjointFragments(LowerThanOrEq(100))
 		require.Len(t, ub.disjointFragments, 3)
 	})
 }

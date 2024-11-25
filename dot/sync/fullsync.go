@@ -167,7 +167,7 @@ func (f *FullSyncStrategy) Process(results []*SyncTaskResult) (
 		// then the response should only contain the missing parts that will complete
 		// the unreadyBlocks and then with the blocks completed we should be able to import them
 		if reqRespData.req.RequestField(messages.RequestedDataHeader) {
-			updatedFragment, ok := f.unreadyBlocks.updateDisjointFragment(responseFragment)
+			updatedFragment, ok := f.unreadyBlocks.updateDisjointFragments(responseFragment)
 			if ok {
 				validFragment := updatedFragment.Filter(func(bd *types.BlockData) bool {
 					return bd.Header.Number > highestFinalized.Number
@@ -275,7 +275,7 @@ func (f *FullSyncStrategy) Process(results []*SyncTaskResult) (
 	}
 
 	// update unready blocks based on the highest finalized block
-	f.unreadyBlocks.pruneDisjointFragments(LowerThanOrEqHighestFinalized(highestFinalized.Number))
+	f.unreadyBlocks.pruneDisjointFragments(LowerThanOrEq(highestFinalized.Number))
 	f.unreadyBlocks.removeIncompleteBlocks(func(_ common.Hash, value *types.BlockData) bool {
 		return value.Header.Number <= highestFinalized.Number
 	})

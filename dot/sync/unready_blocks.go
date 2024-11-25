@@ -44,7 +44,7 @@ func (f *Fragment) Find(p func(*types.BlockData) bool) *types.BlockData {
 	return nil
 }
 
-// Last returns the first block in the fragment or nil otherwise
+// First returns the first block in the fragment or nil otherwise
 func (f *Fragment) First() *types.BlockData {
 	if len(f.chain) > 0 {
 		return f.chain[0]
@@ -72,7 +72,9 @@ func (f *Fragment) Len() int {
 func (f *Fragment) Iter() iter.Seq[*types.BlockData] {
 	return func(yield func(*types.BlockData) bool) {
 		for _, bd := range f.chain {
-			yield(bd)
+			if !yield(bd) {
+				return
+			}
 		}
 	}
 }
@@ -116,8 +118,8 @@ func (u *unreadyBlocks) newDisjointFragment(frag *Fragment) {
 }
 
 // updateDisjointFragments given a set of blocks check if it
-// connects to a disjoint fragment, and returns a ne fragment
-func (u *unreadyBlocks) updateDisjointFragment(chain *Fragment) (*Fragment, bool) {
+// connects to a disjoint fragment, and returns a new fragment
+func (u *unreadyBlocks) updateDisjointFragments(chain *Fragment) (*Fragment, bool) {
 	u.mtx.Lock()
 	defer u.mtx.Unlock()
 
@@ -208,12 +210,12 @@ func (u *unreadyBlocks) pruneDisjointFragments(del func(*Fragment) bool) {
 	u.disjointFragments = slices.DeleteFunc(u.disjointFragments, del)
 }
 
-// LowerThanOrEqHighestFinalized returns true if the fragment contains
+// LowerThanOrEq returns true if the fragment contains
 // a block that has a number lower than highest finalized number
-func LowerThanOrEqHighestFinalized(highestFinalizedNumber uint) func(*Fragment) bool {
+func LowerThanOrEq(blockNumber uint) func(*Fragment) bool {
 	return func(f *Fragment) bool {
 		return f.Find(func(bd *types.BlockData) bool {
-			return bd.Header.Number <= highestFinalizedNumber
+			return bd.Header.Number <= blockNumber
 		}) != nil
 	}
 }
