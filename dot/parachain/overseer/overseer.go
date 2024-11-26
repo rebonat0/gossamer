@@ -28,6 +28,8 @@ import (
 	"github.com/ChainSafe/gossamer/lib/runtime"
 )
 
+const MinRuntimeVersionForParachains = 1
+
 var (
 	logger               = log.NewFromGlobal(log.AddContext("pkg", "parachain-overseer"))
 	ParachainHostAPIName = common.MustBlake2b8([]byte("ParachainHost"))
@@ -216,7 +218,7 @@ func (o *OverseerSystem) handleBlockEvents() {
 			o.activeLeaves[imported.Header.Hash()] = uint32(imported.Header.Number)
 			delete(o.activeLeaves, imported.Header.ParentHash)
 
-			supports, err := o.headSupportsParachain(imported.Header.Hash())
+			supports, err := o.DoesHeadSupportsParachainConsensus(imported.Header.Hash())
 			if err != nil {
 				logger.Criticalf("checking head supports parachain: %s", err.Error())
 				return
@@ -269,7 +271,7 @@ func (o *OverseerSystem) broadcast(msg any) {
 	}
 }
 
-func (o *OverseerSystem) headSupportsParachain(hash common.Hash) (bool, error) {
+func (o *OverseerSystem) DoesHeadSupportsParachainConsensus(hash common.Hash) (bool, error) {
 	instance, err := o.blockState.GetRuntime(hash)
 	if err != nil {
 		return false, fmt.Errorf("getting runtime: %w", err)
@@ -285,7 +287,7 @@ func (o *OverseerSystem) headSupportsParachain(hash common.Hash) (bool, error) {
 		return false, nil
 	}
 
-	return ver >= 1, nil
+	return ver >= MinRuntimeVersionForParachains, nil
 }
 
 func (o *OverseerSystem) Stop() error {
