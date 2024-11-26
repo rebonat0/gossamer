@@ -47,21 +47,31 @@
   aliases: []
   description: issue requires detective debug work to figure out what's going wrong.
 
-- name: A-design
-  color: "#FBCA04"
-  aliases: []
-  description: issue requires design work to think about how it would best be accomplished.
-
 # Describes the type of issue or pull request.
 - name: T-bug
   color: "#FEF2C0"
   aliases: []
   description: this issue covers unexpected and/or wrong behaviour.
 
-- name: T-feat
+- name: T-implementation
   color: "#FEF2C0"
   aliases: []
   description: this issue/pr is a new feature or functionality.
+
+- name: T-research
+  color: "#FEF2C0"
+  aliases: []
+  description: this issue/pr is a research type issue.
+
+- name: T-investigation
+  color: "#FEF2C0"
+  aliases: []
+  description: this issue/pr is an investigation, probably related to some bug with unknown causes.
+
+- name: T-design
+  color: "#FEF2C0"
+  aliases: [ ]
+  description: this issues describes design requirements
 
 - name: T-enhancement
   color: "#FEF2C0"
@@ -77,16 +87,6 @@
   color: "#FEF2C0"
   aliases: []
   description: this issue/pr covers security sensitive problem.
-
-- name: T-research
-  color: "#FEF2C0"
-  aliases: []
-  description: this issue/pr is a research type issue.
-
-- name: T-investigation
-  color: "#FEF2C0"
-  aliases: []
-  description: this issue/pr is an investigation, probably related to some bug with unknown causes.
 
 - name: T-question
   color: "#FEF2C0"
