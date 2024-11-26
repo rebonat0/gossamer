@@ -1,7 +1,7 @@
 ---
 name: Investigation
 about: 
-title: 'collection of business/tech scope'
+title: ' Investigate/ Research on ...'
 labels: 'T-investigation'
 assignees: ''
 ---

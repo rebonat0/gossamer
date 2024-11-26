@@ -1,7 +1,7 @@
 ---
 name: Implementation
 about: General purpose issue template can be used pretty much for every implementation
-title: ''
+title: 'Implement ... '
 labels: 'T-implementation'
 assignees: ''
 

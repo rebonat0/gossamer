@@ -1,7 +1,7 @@
 ---
 name: Software Design
 about: 
-title: 'collection of business/tech scope'
+title: 'Design ...'
 labels: 'T-design'
 assignees: ''
 ---
