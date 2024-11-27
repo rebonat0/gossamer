@@ -10,7 +10,7 @@ assignees: ''
 <!-- A clear and concise description of what should be investigated or researched. -->
 
 ## Related resources
-<!-- List of additional resource that might be usefull when doing research or investigation -->
+<!-- List of additional resource that might be useful when doing research or investigation -->
 
 ## Acceptance criteria
 <!-- Acceptance criteria in terms of investigation or research usually (but not only) should consist of:
