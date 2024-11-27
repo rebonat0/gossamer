@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 ## Summary
-<!-- A clear and concise description of what should be investigated or researched is about. -->
+<!-- A clear and concise description of what should be investigated or researched. -->
 
 ## Related resources
 <!-- List of additional resource that might be usefull when doing research or investigation -->
