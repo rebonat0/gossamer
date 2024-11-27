@@ -12,7 +12,7 @@ assignees: ''
 -
 
 ## Implementation details
-<!-- How this issues should be addressed. -->
+<!-- How this issue should be addressed. -->
 -
 
 ## Other information and links
