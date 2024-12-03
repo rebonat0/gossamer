@@ -57,7 +57,7 @@ func HandleIntroduceSecondedCandidate(
 	hash, err := candidate.Hash()
 
 	if err != nil {
-		logger.Tracef("Failed to get candidate hash: %s", err.Error())
+		logger.Tracef("hashing candidate: %s", err.Error())
 		response <- false
 		return
 	}
