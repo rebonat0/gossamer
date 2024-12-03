@@ -105,7 +105,7 @@ func HandleIntroduceSecondedCandidate(
 				added = append(added, relayParent)
 			} else {
 				logger.Tracef(
-					"Failed to add seconded candidate with hash: %s error: %s para: %v relayParent: %v isActiveLeaf: %v",
+					"adding seconded candidate with hash: %s error: %s para: %v relayParent: %v isActiveLeaf: %v",
 					candidateHash,
 					err.Error(),
 					para,
