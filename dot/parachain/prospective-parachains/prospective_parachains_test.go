@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const MAX_POV_SIZE = 1_000_000
+const MaxPovSize = 1_000_000
+
 
 func dummyPVD(parentHead parachaintypes.HeadData, relayParentNumber uint32) parachaintypes.PersistedValidationData {
 	return parachaintypes.PersistedValidationData{
