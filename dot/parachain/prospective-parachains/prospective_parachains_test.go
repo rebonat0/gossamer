@@ -20,7 +20,7 @@ func dummyPVD(parentHead parachaintypes.HeadData, relayParentNumber uint32) para
 		ParentHead:             parentHead,
 		RelayParentNumber:      relayParentNumber,
 		RelayParentStorageRoot: common.EmptyHash,
-		MaxPovSize:             MAX_POV_SIZE,
+		MaxPovSize:             MaxPovSize,
 	}
 }
 

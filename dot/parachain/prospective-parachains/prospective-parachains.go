@@ -211,3 +211,4 @@ func (*ProspectiveParachains) ProcessBlockFinalizedSignal(parachaintypes.BlockFi
 	// NOTE: this subsystem does not process block finalized signal
 	return nil
 }
+
