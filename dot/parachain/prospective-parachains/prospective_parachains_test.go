@@ -159,7 +159,7 @@ func TestFailedIntroduceSecondedCandidateWhenMissingViewPerRelayParent(
 	validationCodeHash := parachaintypes.ValidationCodeHash{0x01}
 	candidateRelayParentNumber := uint32(1)
 
-	candidate := MakeCandidate(
+	candidate := makeCandidate(
 		candidateRelayParent,
 		candidateRelayParentNumber,
 		paraId,
@@ -194,7 +194,7 @@ func TestFailedIntroduceSecondedCandidateWhenParentHeadAndHeadDataEquals(
 	validationCodeHash := parachaintypes.ValidationCodeHash{0x01}
 	candidateRelayParentNumber := uint32(1)
 
-	candidate := MakeCandidate(
+	candidate := makeCandidate(
 		candidateRelayParent,
 		candidateRelayParentNumber,
 		paraId,
@@ -249,7 +249,7 @@ func TestHandleIntroduceSecondedCandidate(
 	validationCodeHash := parachaintypes.ValidationCodeHash{0x01}
 	candidateRelayParentNumber := uint32(1)
 
-	candidate := MakeCandidate(
+	candidate := makeCandidate(
 		candidateRelayParent,
 		candidateRelayParentNumber,
 		paraId,

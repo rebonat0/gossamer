@@ -180,7 +180,7 @@ func (pp *ProspectiveParachains) processMessage(msg any) {
 	case parachaintypes.BlockFinalizedSignal:
 		_ = pp.ProcessBlockFinalizedSignal(msg)
 	case IntroduceSecondedCandidate:
-		_ = pp.introduceSecondedCandidate(
+		pp.introduceSecondedCandidate(
 			pp.View,
 			msg.IntroduceSecondedCandidateRequest,
 			msg.Response,
