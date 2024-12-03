@@ -120,7 +120,7 @@ func HandleIntroduceSecondedCandidate(
 
 	if !paraScheduled {
 		logger.Warnf(
-			"Received seconded candidate with hash: %s for inactive para: %v",
+			"received seconded candidate with hash: %s for inactive para: %v",
 			candidateHash,
 			para,
 		)
