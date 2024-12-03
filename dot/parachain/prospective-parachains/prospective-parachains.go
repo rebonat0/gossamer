@@ -45,7 +45,7 @@ func (v *View) GetFragmentChains(leaf common.Hash) map[parachaintypes.ParaID]fra
 	return nil
 }
 
-func HandleIntroduceSecondedCandidate(
+func (pp *ProspectiveParachains) introduceSecondedCandidate(
 	view *View,
 	request IntroduceSecondedCandidateRequest,
 	response chan bool,
@@ -180,7 +180,7 @@ func (pp *ProspectiveParachains) processMessage(msg any) {
 	case parachaintypes.BlockFinalizedSignal:
 		_ = pp.ProcessBlockFinalizedSignal(msg)
 	case IntroduceSecondedCandidate:
-		HandleIntroduceSecondedCandidate(
+		_ = pp.introduceSecondedCandidate(
 			pp.View,
 			msg.IntroduceSecondedCandidateRequest,
 			msg.Response,
