@@ -54,7 +54,8 @@ func dummyCandidateReceiptBadSig(
 	}
 }
 
-func MakeCandidate(
+func makeCandidate(
+
 	relayParent common.Hash,
 	relayParentNumber uint32,
 	paraID parachaintypes.ParaID,
