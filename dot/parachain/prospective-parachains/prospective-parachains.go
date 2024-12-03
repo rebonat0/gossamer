@@ -72,7 +72,7 @@ func HandleIntroduceSecondedCandidate(
 	)
 
 	if err != nil {
-		logger.Tracef("Failed to add seconded candidate error: %s para: %v", err.Error(), para)
+		logger.Tracef("adding seconded candidate error: %s para: %v", err.Error(), para)
 		response <- false
 		return
 	}
