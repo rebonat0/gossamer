@@ -127,7 +127,7 @@ func HandleIntroduceSecondedCandidate(
 	}
 
 	if len(added) == 0 {
-		logger.Debugf("Newly-seconded candidate cannot be kept under any relay parent: %s", candidateHash)
+		logger.Debugf("newly-seconded candidate cannot be kept under any relay parent: %s", candidateHash)
 	} else {
 		logger.Debugf("Added seconded candidate to %d relay parents: %s", len(added), candidateHash)
 	}
