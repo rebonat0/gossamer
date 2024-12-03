@@ -96,7 +96,7 @@ func HandleIntroduceSecondedCandidate(
 		if err != nil {
 			if errors.Is(err, fragmentchain.ErrCandidateAlradyKnown) {
 				logger.Tracef(
-					"Attempting to introduce an already known candidate with hash: %s, para: %v relayParent: %v isActiveLeaf: %v",
+					"attempting to introduce an already known candidate with hash: %s, para: %v relayParent: %v isActiveLeaf: %v",
 					candidateHash,
 					para,
 					relayParent,
