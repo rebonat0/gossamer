@@ -264,7 +264,7 @@ func TestEarliestRelayParent(t *testing.T) {
 		setup  func() *Scope
 		expect inclusionemulator.RelayChainBlockInfo
 	}{
-		"returns from ancestors": {
+		"returns_from_ancestors": {
 			setup: func() *Scope {
 				relayParent := inclusionemulator.RelayChainBlockInfo{
 					Hash:   common.Hash{0x01},
@@ -290,7 +290,7 @@ func TestEarliestRelayParent(t *testing.T) {
 				Number: 9,
 			},
 		},
-		"returns relayParent": {
+		"returns_relay_parent": {
 			setup: func() *Scope {
 				relayParent := inclusionemulator.RelayChainBlockInfo{
 					Hash:   common.Hash{0x01},
