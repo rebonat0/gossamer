@@ -567,6 +567,13 @@ type PersistedValidationData struct {
 	MaxPovSize             uint32      `scale:"4"`
 }
 
+func (pvd PersistedValidationData) Equal(other PersistedValidationData) bool {
+	return bytes.Equal(pvd.ParentHead.Data, other.ParentHead.Data) &&
+		pvd.RelayParentNumber == other.RelayParentNumber &&
+		pvd.RelayParentStorageRoot == other.RelayParentStorageRoot &&
+		pvd.MaxPovSize == other.MaxPovSize
+}
+
 func (pvd PersistedValidationData) Hash() (common.Hash, error) {
 	bytes, err := scale.Marshal(pvd)
 	if err != nil {

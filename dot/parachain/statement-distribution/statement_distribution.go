@@ -34,7 +34,6 @@ func (s StatementDistribution) Run(ctx context.Context, overseerToSubSystem <-ch
 }
 
 func (s StatementDistribution) processMessage(msg any) error {
-
 	switch msg := msg.(type) {
 	case statementedistributionmessages.Backed:
 		// TODO #4171

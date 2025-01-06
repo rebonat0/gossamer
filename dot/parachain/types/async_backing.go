@@ -3,6 +3,11 @@
 
 package parachaintypes
 
+import (
+	"maps"
+	"slices"
+)
+
 // AsyncBackingParams contains the parameters for the async backing.
 type AsyncBackingParams struct {
 	// The maximum number of para blocks between the para head in a relay parent
@@ -52,7 +57,7 @@ type Constraints struct {
 	// The maximum number of UMP messages allowed per candidate.
 	MaxNumUMPPerCandidate uint32
 	// Remaining DMP queue. Only includes sent-at block numbers.
-	DMPRemainingMessages []uint32
+	DMPRemainingMessages []BlockNumber
 	// The limitations of all registered inbound HRMP channels.
 	HRMPInbound InboundHRMPLimitations
 	// The limitations of all registered outbound HRMP channels.
@@ -90,4 +95,44 @@ type CandidatePendingAvailability struct {
 type BackingState struct {
 	Constraints         Constraints
 	PendingAvailability []CandidatePendingAvailability
+}
+
+func (c *Constraints) Clone() *Constraints {
+	requiredParent := HeadData{
+		Data: make([]byte, len(c.RequiredParent.Data)),
+	}
+	copy(requiredParent.Data, c.RequiredParent.Data)
+
+	var upgradeRestriction *UpgradeRestriction
+	if c.UpgradeRestriction != nil {
+		restriction := *c.UpgradeRestriction
+		upgradeRestriction = &restriction
+	}
+
+	var futureValidationCode *FutureValidationCode
+	if c.FutureValidationCode != nil {
+		futureValidationCode = &FutureValidationCode{
+			BlockNumber:        c.FutureValidationCode.BlockNumber,
+			ValidationCodeHash: c.FutureValidationCode.ValidationCodeHash,
+		}
+	}
+
+	return &Constraints{
+		MinRelayParentNumber:  c.MinRelayParentNumber,
+		MaxPoVSize:            c.MaxPoVSize,
+		MaxCodeSize:           c.MaxCodeSize,
+		UMPRemaining:          c.UMPRemaining,
+		UMPRemainingBytes:     c.UMPRemainingBytes,
+		MaxNumUMPPerCandidate: c.MaxNumUMPPerCandidate,
+		DMPRemainingMessages:  slices.Clone(c.DMPRemainingMessages),
+		HRMPInbound: InboundHRMPLimitations{
+			ValidWatermarks: slices.Clone(c.HRMPInbound.ValidWatermarks),
+		},
+		HRMPChannelsOut:        maps.Clone(c.HRMPChannelsOut),
+		MaxNumHRMPPerCandidate: c.MaxNumHRMPPerCandidate,
+		RequiredParent:         requiredParent,
+		ValidationCodeHash:     c.ValidationCodeHash,
+		UpgradeRestriction:     upgradeRestriction,
+		FutureValidationCode:   futureValidationCode,
+	}
 }
