@@ -72,7 +72,7 @@ func makeCandidate(
 	commitmentsHash := commitments.Hash()
 
 	candidate := dummyCandidateReceiptBadSig(relayParent, &commitmentsHash)
-	candidate.CommitmentsHash = commitmentsHash
+	candidate.CommitmentsHash = commitments.Hash()
 	candidate.Descriptor.ParaID = paraID
 
 	pvdh, err := pvd.Hash()
@@ -90,6 +90,111 @@ func makeCandidate(
 	}
 
 	return result
+}
+
+func padTo32Bytes(input []byte) common.Hash {
+	var hash common.Hash
+	copy(hash[:], input)
+	return hash
+}
+
+// TestGetMinimumRelayParents ensures that getMinimumRelayParents
+// processes the relay parent hash and correctly sends the output via the channel
+func TestGetMinimumRelayParents(t *testing.T) {
+	// Setup a mock View with active leaves and relay parent data
+
+	mockRelayParent := relayChainBlockInfo{
+		Hash:   padTo32Bytes([]byte("active_hash")),
+		Number: 10,
+	}
+
+	ancestors := []relayChainBlockInfo{
+		{
+			Hash:   padTo32Bytes([]byte("active_hash_7")),
+			Number: 9,
+		},
+		{
+			Hash:   padTo32Bytes([]byte("active_hash_8")),
+			Number: 8,
+		},
+		{
+			Hash:   padTo32Bytes([]byte("active_hash_9")),
+			Number: 7,
+		},
+	}
+
+	baseConstraints := &parachaintypes.Constraints{
+		MinRelayParentNumber: 5,
+	}
+
+	mockScope, err := newScopeWithAncestors(mockRelayParent, baseConstraints, nil, 10, ancestors)
+	assert.NoError(t, err)
+
+	mockScope2, err := newScopeWithAncestors(mockRelayParent, baseConstraints, nil, 10, nil)
+	assert.NoError(t, err)
+
+	mockView := &view{
+		activeLeaves: map[common.Hash]bool{
+			common.BytesToHash([]byte("active_hash")): true,
+		},
+		perRelayParent: map[common.Hash]*relayParentData{
+			common.BytesToHash([]byte("active_hash")): {
+				fragmentChains: map[parachaintypes.ParaID]*fragmentChain{
+					parachaintypes.ParaID(1): newFragmentChain(mockScope, newCandidateStorage()),
+					parachaintypes.ParaID(2): newFragmentChain(mockScope2, newCandidateStorage()),
+				},
+			},
+		},
+	}
+
+	// Initialize ProspectiveParachains with the mock view
+	pp := &ProspectiveParachains{
+		View: mockView,
+	}
+
+	// Create a channel to capture the output
+	sender := make(chan []ParaIDBlockNumber, 1)
+
+	// Execute the method under test
+	pp.getMinimumRelayParents(common.BytesToHash([]byte("active_hash")), sender)
+
+	expected := []ParaIDBlockNumber{
+		{
+			ParaId:      1,
+			BlockNumber: 10,
+		},
+		{
+			ParaId:      2,
+			BlockNumber: 10,
+		},
+	}
+	// Validate the results
+	result := <-sender
+	assert.Len(t, result, 2)
+	assert.Equal(t, expected, result)
+}
+
+// TestGetMinimumRelayParents_NoActiveLeaves ensures that getMinimumRelayParents
+// correctly handles the case where there are no active leaves.
+func TestGetMinimumRelayParents_NoActiveLeaves(t *testing.T) {
+	mockView := &view{
+		activeLeaves:   map[common.Hash]bool{},
+		perRelayParent: map[common.Hash]*relayParentData{},
+	}
+
+	// Initialize ProspectiveParachains with the mock view
+	pp := &ProspectiveParachains{
+		View: mockView,
+	}
+
+	// Create a channel to capture the output
+	sender := make(chan []ParaIDBlockNumber, 1)
+
+	// Execute the method under test
+	pp.getMinimumRelayParents(common.BytesToHash([]byte("active_hash")), sender)
+	// Validate the results
+	result := <-sender
+	assert.Empty(t, result, "Expected result to be empty when no active leaves are present")
 }
 
 func TestGetBackableCandidates(t *testing.T) {

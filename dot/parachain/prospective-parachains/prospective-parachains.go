@@ -72,7 +72,8 @@ func (pp *ProspectiveParachains) processMessage(msg any) {
 	case GetHypotheticalMembership:
 		panic("not implemented yet: see issue #4311")
 	case GetMinimumRelayParents:
-		panic("not implemented yet: see issue #4312")
+		// Directly use the msg since it's already of type GetMinimumRelayParents
+		pp.getMinimumRelayParents(msg.RelayChainBlockHash, msg.Sender)
 	case GetProspectiveValidationData:
 		panic("not implemented yet: see issue #4313")
 	default:
@@ -90,6 +91,30 @@ func (pp *ProspectiveParachains) ProcessActiveLeavesUpdateSignal(parachaintypes.
 func (*ProspectiveParachains) ProcessBlockFinalizedSignal(parachaintypes.BlockFinalizedSignal) error {
 	// NOTE: this subsystem does not process block finalized signal
 	return nil
+}
+
+func (pp *ProspectiveParachains) getMinimumRelayParents(
+	relayChainBlockHash common.Hash,
+	sender chan []ParaIDBlockNumber,
+) {
+	var result []ParaIDBlockNumber
+
+	// Check if the relayChainBlockHash exists in active_leaves
+	if exists := pp.View.activeLeaves[relayChainBlockHash]; exists {
+		// Retrieve data associated with the relayChainBlockHash
+		if leafData, found := pp.View.perRelayParent[relayChainBlockHash]; found {
+			// Iterate over fragment_chains and collect the data
+			for paraID, fragmentChain := range leafData.fragmentChains {
+				result = append(result, ParaIDBlockNumber{
+					ParaId:      paraID,
+					BlockNumber: fragmentChain.scope.relayParent.Number,
+				})
+			}
+		}
+	}
+
+	// Send the result through the sender channel
+	sender <- result
 }
 
 func (pp *ProspectiveParachains) getBackableCandidates(
