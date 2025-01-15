@@ -5,9 +5,7 @@ import (
 	"context"
 	"testing"
 
-	fragmentchain "github.com/ChainSafe/gossamer/dot/parachain/prospective-parachains/fragment-chain"
 	parachaintypes "github.com/ChainSafe/gossamer/dot/parachain/types"
-	inclusionemulator "github.com/ChainSafe/gossamer/dot/parachain/util/inclusion-emulator"
 	"github.com/ChainSafe/gossamer/lib/common"
 	"github.com/stretchr/testify/assert"
 )
@@ -125,24 +123,23 @@ func TestFailedIntroduceSecondedCandidateWhenParentHeadAndHeadDataEquals(
 
 	prospectiveParachains := NewProspectiveParachains(subsystemToOverseer)
 
-	relayParent := inclusionemulator.RelayChainBlockInfo{
+	relayParent := relayChainBlockInfo{
 		Hash:        candidateRelayParent,
 		Number:      0,
 		StorageRoot: common.Hash{0x00},
 	}
 
-	baseConstraints := &inclusionemulator.Constraints{
+	baseConstraints := &parachaintypes.Constraints{
 		RequiredParent:       parachaintypes.HeadData{Data: []byte{byte(0)}},
 		MinRelayParentNumber: 0,
 		ValidationCodeHash:   parachaintypes.ValidationCodeHash(common.Hash{0x03}),
 	}
-
-	scope, err := fragmentchain.NewScopeWithAncestors(relayParent, baseConstraints, nil, 10, nil)
+	scope, err := newScopeWithAncestors(relayParent, baseConstraints, nil, 10, nil)
 	assert.NoError(t, err)
 
-	prospectiveParachains.View.PerRelayParent[candidateRelayParent] = RelayBlockViewData{
-		FragmentChains: map[parachaintypes.ParaID]fragmentchain.FragmentChain{
-			paraId: *fragmentchain.NewFragmentChain(scope, fragmentchain.NewCandidateStorage()),
+	prospectiveParachains.View.perRelayParent[candidateRelayParent] = &relayParentData{
+		fragmentChains: map[parachaintypes.ParaID]*fragmentChain{
+			paraId: newFragmentChain(scope, newCandidateStorage()),
 		},
 	}
 	go prospectiveParachains.Run(context.Background(), overseerToSubsystem)
@@ -180,24 +177,24 @@ func TestHandleIntroduceSecondedCandidate(
 
 	prospectiveParachains := NewProspectiveParachains(subsystemToOverseer)
 
-	relayParent := inclusionemulator.RelayChainBlockInfo{
+	relayParent := relayChainBlockInfo{
 		Hash:        candidateRelayParent,
 		Number:      0,
 		StorageRoot: common.Hash{0x00},
 	}
 
-	baseConstraints := &inclusionemulator.Constraints{
+	baseConstraints := &parachaintypes.Constraints{
 		RequiredParent:       parachaintypes.HeadData{Data: []byte{byte(0)}},
 		MinRelayParentNumber: 0,
 		ValidationCodeHash:   parachaintypes.ValidationCodeHash(common.Hash{0x03}),
 	}
 
-	scope, err := fragmentchain.NewScopeWithAncestors(relayParent, baseConstraints, nil, 10, nil)
+	scope, err := newScopeWithAncestors(relayParent, baseConstraints, nil, 10, nil)
 	assert.NoError(t, err)
 
-	prospectiveParachains.View.PerRelayParent[candidateRelayParent] = RelayBlockViewData{
-		FragmentChains: map[parachaintypes.ParaID]fragmentchain.FragmentChain{
-			paraId: *fragmentchain.NewFragmentChain(scope, fragmentchain.NewCandidateStorage()),
+	prospectiveParachains.View.perRelayParent[candidateRelayParent] = &relayParentData{
+		fragmentChains: map[parachaintypes.ParaID]*fragmentChain{
+			paraId: newFragmentChain(scope, newCandidateStorage()),
 		},
 	}
 	go prospectiveParachains.Run(context.Background(), overseerToSubsystem)

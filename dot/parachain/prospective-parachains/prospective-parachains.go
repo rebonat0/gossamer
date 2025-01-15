@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/ChainSafe/gossamer/dot/parachain/backing"
-	fragmentchain "github.com/ChainSafe/gossamer/dot/parachain/prospective-parachains/fragment-chain"
 	parachaintypes "github.com/ChainSafe/gossamer/dot/parachain/types"
 	"github.com/ChainSafe/gossamer/internal/log"
 	"github.com/ChainSafe/gossamer/lib/common"
@@ -13,36 +12,13 @@ import (
 
 var logger = log.NewFromGlobal(log.AddContext("pkg", "prospective_parachains"), log.SetLevel(log.Debug))
 
-type RelayBlockViewData struct {
-	// The fragment chains for current and upcoming scheduled paras.
-	FragmentChains map[parachaintypes.ParaID]fragmentchain.FragmentChain
-}
-
-type View struct {
-	// Per relay parent fragment chains. These includes all relay parents under the implicit view.
-	PerRelayParent map[common.Hash]RelayBlockViewData
-	// The hashes of the currently active leaves. This is a subset of the keys in
-	// `per_relay_parent`.
-	ActiveLeaves map[common.Hash]struct{}
-	// The backing implicit view.
-	ImplicitView backing.ImplicitView
-}
-
 // Initialize with empty values.
-func NewView() *View {
-	return &View{
-		PerRelayParent: make(map[common.Hash]RelayBlockViewData),
-		ActiveLeaves:   make(map[common.Hash]struct{}),
-		ImplicitView:   nil, // TODO: currently there's no implementation for ImplicitView, reference is: https://github.com/paritytech/polkadot-sdk/blob/028e61be43f05f6f6c88c5cca94160f8db075585/polkadot/node/subsystem-util/src/backing_implicit_view.rs#L40
+func NewView() *view {
+	return &view{
+		perRelayParent: make(map[common.Hash]*relayParentData),
+		activeLeaves:   make(map[common.Hash]bool),
+		implicitView:   nil, // TODO: currently there's no implementation for ImplicitView, reference is: https://github.com/paritytech/polkadot-sdk/blob/028e61be43f05f6f6c88c5cca94160f8db075585/polkadot/node/subsystem-util/src/backing_implicit_view.rs#L40
 	}
-}
-
-// Get the fragment chains of this leaf.
-func (v *View) GetFragmentChains(leaf common.Hash) map[parachaintypes.ParaID]fragmentchain.FragmentChain {
-	if viewData, ok := v.PerRelayParent[leaf]; ok {
-		return viewData.FragmentChains
-	}
-	return nil
 }
 
 type ProspectiveParachains struct {
@@ -53,6 +29,7 @@ type ProspectiveParachains struct {
 type view struct {
 	activeLeaves   map[common.Hash]bool
 	perRelayParent map[common.Hash]*relayParentData
+	implicitView   backing.ImplicitView
 }
 
 type relayParentData struct {
@@ -122,7 +99,7 @@ func (pp *ProspectiveParachains) processMessage(msg any) {
 }
 
 func (pp *ProspectiveParachains) introduceSecondedCandidate(
-	view *View,
+	view *view,
 	request IntroduceSecondedCandidateRequest,
 	response chan bool,
 ) {
@@ -140,11 +117,11 @@ func (pp *ProspectiveParachains) introduceSecondedCandidate(
 
 	candidateHash := parachaintypes.CandidateHash{Value: hash}
 
-	entry, err := fragmentchain.NewCandidateEntry(
+	entry, err := newCandidateEntry(
 		candidateHash,
 		candidate,
 		pvd,
-		fragmentchain.Seconded,
+		seconded,
 	)
 
 	if err != nil {
@@ -153,24 +130,24 @@ func (pp *ProspectiveParachains) introduceSecondedCandidate(
 		return
 	}
 
-	added := make([]common.Hash, 0, len(view.PerRelayParent))
+	added := make([]common.Hash, 0, len(view.perRelayParent))
 	paraScheduled := false
 
-	for relayParent, rpData := range view.PerRelayParent {
-		chain, exists := rpData.FragmentChains[para]
+	for relayParent, rpData := range view.perRelayParent {
+		chain, exists := rpData.fragmentChains[para]
 
 		if !exists {
 			continue
 		}
 
-		_, isActiveLeaf := view.ActiveLeaves[relayParent]
+		_, isActiveLeaf := view.activeLeaves[relayParent]
 
 		paraScheduled = true
 
-		err = chain.TryAddingSecondedCandidate(entry)
+		err = chain.tryAddingSecondedCandidate(entry)
 
 		if err != nil {
-			if errors.Is(err, fragmentchain.ErrCandidateAlradyKnown) {
+			if errors.Is(err, errCandidateAlreadyKnown) {
 				logger.Tracef(
 					"attempting to introduce an already known candidate with hash: %s, para: %v relayParent: %v isActiveLeaf: %v",
 					candidateHash,
