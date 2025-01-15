@@ -17,7 +17,8 @@ func NewView() *view {
 	return &view{
 		perRelayParent: make(map[common.Hash]*relayParentData),
 		activeLeaves:   make(map[common.Hash]bool),
-		implicitView:   nil, // TODO: currently there's no implementation for ImplicitView, reference is: https://github.com/paritytech/polkadot-sdk/blob/028e61be43f05f6f6c88c5cca94160f8db075585/polkadot/node/subsystem-util/src/backing_implicit_view.rs#L40
+		implicitView:   nil, // TODO: currently there's no implementation for ImplicitView, reference is:
+		// https://github.com/ChainSafe/gossamer/blob/main/lib/prospective_parachains/view.go#L10
 	}
 }
 
